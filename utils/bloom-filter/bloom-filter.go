@@ -1,12 +1,16 @@
 package bloomfilter
 
-import "github.com/golang-collections/go-datastructures/bitarray"
+import (
+	"nosql-engine/packages/utils/hash"
+
+	"github.com/golang-collections/go-datastructures/bitarray"
+)
 
 type BloomFilter struct {
 	m             uint // bitarray size
 	k             uint // number of hash values
 	bits          bitarray.BitArray
-	hashFunctions []HashWithSeed
+	hashFunctions []hash.HashWithSeed
 }
 
 func New(expectedElements int, falsePositiveRate float64) *BloomFilter {
@@ -17,7 +21,7 @@ func New(expectedElements int, falsePositiveRate float64) *BloomFilter {
 		m:             tempM,
 		k:             tempK,
 		bits:          bitarray.NewBitArray(uint64(tempM)),
-		hashFunctions: CreateHashFunctions(tempK),
+		hashFunctions: hash.CreateHashFunctions(tempK),
 	}
 }
 
