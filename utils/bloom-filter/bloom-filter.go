@@ -8,7 +8,7 @@ import (
 
 type BloomFilter struct {
 	m             uint // bitarray size
-	k             uint // number of hash values
+	k             uint // number of hash functions
 	bits          bitarray.BitArray
 	hashFunctions []hash.HashWithSeed
 }
