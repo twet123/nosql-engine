@@ -1,19 +1,19 @@
-package main
+package b_tree
 
 import (
 	"fmt"
 	"github.com/disiqueira/gotree"
 	"golang.org/x/exp/constraints"
+	GTypes "nosql-engine/packages/utils/generic-types"
 	Slice "nosql-engine/packages/utils/slice-utils"
 )
 
 // Node B-Tree node - don't create them by yourself - use BTree
 type Node[K constraints.Ordered, V any] struct {
-	owner    *BTree[K, V]
-	parent   *Node[K, V]
-	children []*Node[K, V]
-	keys     []K
-	values   []V
+	owner     *BTree[K, V]
+	parent    *Node[K, V]
+	children  []*Node[K, V]
+	keyValues []GTypes.KeyVal[K, V]
 }
 
 // BTree is an object containing root of a B-Tree (Node) and all important methods
@@ -33,33 +33,47 @@ func Init[K constraints.Ordered, V any](minElementsCnt, maxElementsCnt int) *BTr
 	return &tree
 }
 
+func (cur *Node[K, V]) MostRightLeaf() *Node[K, V] {
+	if len(cur.children) > 0 {
+		return cur.children[len(cur.children)-1].MostRightLeaf()
+	}
+	return cur
+}
+
+func (cur *Node[K, V]) MostLeftLeaf() *Node[K, V] {
+	if len(cur.children) > 0 {
+		return cur.children[0].MostLeftLeaf()
+	}
+	return cur
+}
+
 func (cur *Node[K, V]) Search(key K) (found bool, node *Node[K, V], index int) {
-	if len(cur.keys) == 0 {
+	if len(cur.keyValues) == 0 {
 		return false, cur, 0
 	}
 
-	for i, k := range cur.keys {
-		if k == key {
+	for i, kv := range cur.keyValues {
+		if kv.Key == key {
 			return true, cur, i
 		}
-		if key < k && len(cur.children) == 0 {
+		if key < kv.Key && len(cur.children) == 0 {
 			return false, cur, i
 		}
-		if key < k {
+		if key < kv.Key {
 			return cur.children[i].Search(key)
 		}
 	}
 	if len(cur.children) == 0 {
-		return false, cur, len(cur.keys)
+		return false, cur, len(cur.keyValues)
 	}
-	return cur.children[len(cur.keys)].Search(key)
+	return cur.children[len(cur.keyValues)].Search(key)
 }
 
-// Get return value if found
-func (tree *BTree[K, V]) Get(key K) (found bool, value V) {
+// Get return KeyVal if found
+func (tree *BTree[K, V]) Get(key K) (found bool, keyVal GTypes.KeyVal[K, V]) {
 	found, node, index := tree.root.Search(key)
 	if found {
-		value = node.values[index]
+		keyVal = node.keyValues[index]
 	}
 	return
 }
@@ -69,22 +83,20 @@ func (tree *BTree[K, V]) Search(key K) (found bool, node *Node[K, V], index int)
 	return tree.root.Search(key)
 }
 
-// Add Key/Value to the BTree
-func (tree *BTree[K, V]) Add(key K, value V) (added bool) {
+// Set Key/Value to the BTree
+func (tree *BTree[K, V]) Set(key K, value V) (newElementAdded bool) {
 	found, node, i := tree.Search(key)
 	if found {
+		node.keyValues[i].Value = value
 		return false
 	}
 
+	kv := GTypes.KeyVal[K, V]{key, value}
 	// Common insertion
-	if i == len(node.keys) {
-		node.keys = Slice.Copy(append(node.keys, key))
-		node.values = Slice.Copy(append(node.values, value))
+	if i == len(node.keyValues) {
+		node.keyValues = append(node.keyValues, kv)
 	} else {
-		node.keys = Slice.Copy(append(node.keys[:i+1], node.keys[i:]...))
-		node.keys[i] = key
-		node.values = Slice.Copy(append(node.values[:i+1], node.values[i:]...))
-		node.values[i] = value
+		node.keyValues = Slice.InsertCopy(node.keyValues[:i], node.keyValues[i:], kv)
 	}
 
 	tree.fightOverflowInNode(node, i)
@@ -92,49 +104,40 @@ func (tree *BTree[K, V]) Add(key K, value V) (added bool) {
 }
 
 func (tree *BTree[K, V]) fightOverflowInNode(node *Node[K, V], index int) {
-	if len(node.keys) <= tree.MaxElementsCnt {
+	if len(node.keyValues) <= tree.MaxElementsCnt {
 		return
 	}
 
 	// Rotation
-	if node.parent != nil {
+	if node.parent != nil && len(node.children) == 0 {
 		// Search for node in parent
 		for nodeI, nodeCandidate := range node.parent.children {
 			if nodeCandidate == node {
-				if nodeI > 0 && len(node.parent.children[nodeI].keys) < tree.MaxElementsCnt {
+				if nodeI > 0 && len(node.parent.children[nodeI-1].MostRightLeaf().keyValues) < tree.MaxElementsCnt {
 					// Rotation to the left
 					// Parent key to the left child
-					leftNode := node.parent.children[nodeI-1]
-					leftNode.keys = Slice.Copy(append(leftNode.keys, node.parent.keys[nodeI-1]))
-					leftNode.values = Slice.Copy(append(leftNode.values, node.parent.values[nodeI-1]))
+					leftNode := node.parent.children[nodeI-1].MostRightLeaf()
+					leftNode.keyValues = append(leftNode.keyValues, node.parent.keyValues[nodeI-1])
 
 					// Current child most left key to parent
-					node.parent.keys[nodeI-1] = node.keys[0]
-					node.parent.values[nodeI-1] = node.values[0]
+					node.parent.keyValues[nodeI-1] = node.keyValues[0]
 
 					// Remove current child most left key
-					node.keys = node.keys[1:]
-					node.values = node.values[1:]
+					node.keyValues = node.keyValues[1:]
 					return
 				}
-				if nodeI < len(node.parent.keys) &&
-					len(node.parent.children[nodeI+1].children) < tree.MaxElementsCnt {
+				if nodeI < len(node.parent.keyValues) &&
+					len(node.parent.children[nodeI+1].MostLeftLeaf().keyValues) < tree.MaxElementsCnt {
 					// Rotation to the right
 					// Parent key to the right child
-					print("before rotation\n", tree.String())
-					rightNode := node.parent.children[nodeI+1]
-					rightNode.keys = Slice.ConcatBothCopy(node.parent.keys[nodeI:nodeI+1], rightNode.keys)
-					rightNode.values = Slice.ConcatBothCopy(node.parent.values[nodeI:nodeI+1], rightNode.values)
+					rightNode := node.parent.children[nodeI+1].MostLeftLeaf()
+					rightNode.keyValues = Slice.ConcatBothCopy(node.parent.keyValues[nodeI:nodeI+1], rightNode.keyValues)
 
-					print(tree.String())
 					// Current child most right key to parent
-					node.parent.keys[nodeI] = node.keys[len(node.keys)-1]
-					node.parent.values[nodeI] = node.values[len(node.values)-1]
+					node.parent.keyValues[nodeI] = node.keyValues[len(node.keyValues)-1]
 
-					print(tree.String())
 					// Remove current child most right key
-					node.keys = node.keys[:len(node.keys)-1]
-					node.values = node.values[:len(node.values)-1]
+					node.keyValues = node.keyValues[:len(node.keyValues)-1]
 					return
 				}
 			}
@@ -142,72 +145,181 @@ func (tree *BTree[K, V]) fightOverflowInNode(node *Node[K, V], index int) {
 	}
 
 	// Division
-	middleI := len(node.keys) / 2
+	middleI := len(node.keyValues) / 2
 
 	left, right := new(Node[K, V]), new(Node[K, V])
-	left.parent, right.parent = node, node
 
-	left.keys = node.keys[:middleI]
-	left.values = node.values[:middleI]
+	left.keyValues = node.keyValues[:middleI]
 	if len(node.children) > 0 {
-		left.children = node.children[:middleI+1]
+		left.children = Slice.Copy(node.children[:middleI+1])
+		for _, child := range left.children {
+			child.parent = left
+		}
 	}
 
-	right.keys = node.keys[middleI+1:]
-	right.values = node.values[middleI+1:]
+	right.keyValues = node.keyValues[middleI+1:]
 	if len(node.children) > 0 {
-		right.children = node.children[middleI+1:]
+		right.children = Slice.Copy(node.children[middleI+1:])
+		for _, child := range right.children {
+			child.parent = right
+		}
 	}
 
 	// Divide root
 	if node.parent == nil {
+		left.parent, right.parent = node, node
 		node.children = []*Node[K, V]{left, right}
-		node.keys = []K{node.keys[middleI]}
-		node.values = []V{node.values[middleI]}
+		node.keyValues = []GTypes.KeyVal[K, V]{node.keyValues[middleI]}
 		return
 	}
+
 	// Or not root
+	left.parent, right.parent = node.parent, node.parent
 	for nodeI, nodeCandidate := range node.parent.children {
 		if nodeCandidate == node {
 			if nodeI == 0 {
-				node.parent.keys = Slice.Copy(append([]K{node.keys[middleI]}, node.keys...))
-				node.parent.values = Slice.Copy(append([]V{node.values[middleI]}, node.values...))
-				node.parent.children = Slice.Copy(append([]*Node[K, V]{left, right}, node.children[1:]...))
+				node.parent.keyValues = append([]GTypes.KeyVal[K, V]{node.keyValues[middleI]}, node.parent.keyValues...)
+				node.parent.children = append([]*Node[K, V]{left, right}, node.parent.children[1:]...)
 				tree.fightOverflowInNode(node.parent, index)
 				return
 			}
 			if nodeI == len(node.parent.children)-1 {
-				node.parent.keys = Slice.Copy(append(Slice.Copy(node.keys), node.keys[middleI]))
-				node.parent.values = Slice.Copy(append(Slice.Copy(node.values), node.values[middleI]))
-				node.parent.children = Slice.Copy(append(Slice.Copy(node.children[:nodeI]), left, right))
+				node.parent.keyValues = append(Slice.Copy(node.parent.keyValues), node.keyValues[middleI])
+				node.parent.children = append(Slice.Copy(node.parent.children[:nodeI]), left, right)
 				tree.fightOverflowInNode(node.parent, index)
 				return
 			}
 
-			node.parent.keys = Slice.InsertCopy(node.keys[:nodeI], node.keys[nodeI:], node.keys[middleI])
-			node.parent.values = Slice.InsertCopy(node.values[:nodeI], node.values[nodeI:], node.values[middleI])
-			node.parent.children = Slice.InsertCopy(node.children[:nodeI], node.children[nodeI+1:], left, right)
+			node.parent.keyValues = Slice.InsertCopy(node.parent.keyValues[:nodeI], node.parent.keyValues[nodeI:], node.keyValues[middleI])
+			node.parent.children = Slice.InsertCopy(node.parent.children[:nodeI], node.parent.children[nodeI+1:], left, right)
 			tree.fightOverflowInNode(node.parent, index)
 		}
 	}
 	return
 }
 
+func (tree *BTree[K, V]) Remove(key K) (removed bool) {
+	found, node, i := tree.Search(key)
+	if !found {
+		return false
+	}
+
+	if len(node.children) > 0 {
+		left := node.children[i]
+		for len(left.children) > 0 {
+			left = left.children[len(left.children)-1]
+		}
+		node.keyValues[i] = left.keyValues[len(left.keyValues)-1]
+		node = left
+		i = len(left.keyValues) - 1
+	}
+
+	if i == 0 {
+		node.keyValues = node.keyValues[1:]
+	} else if i == len(node.keyValues)-1 {
+		node.keyValues = node.keyValues[:i]
+	} else {
+		node.keyValues = Slice.ConcatBothCopy(node.keyValues[:i], node.keyValues[i+1:])
+	}
+	tree.fightUnderflowInNode(node, i)
+	return true
+}
+
+func (tree *BTree[K, V]) fightUnderflowInNode(node *Node[K, V], index int) {
+	if len(node.keyValues) >= tree.MinElementsCnt {
+		return
+	}
+
+	if node.parent == nil {
+		return
+	}
+
+	for nodeI, nodeCandidate := range node.parent.children {
+		if nodeCandidate == node {
+			// Try to borrow something
+			if nodeI > 0 && len(node.parent.children[nodeI-1].MostRightLeaf().keyValues) > tree.MinElementsCnt {
+				// Borrow element from left
+				leftNode := node.parent.children[nodeI-1].MostRightLeaf()
+				node.keyValues = append(
+					[]GTypes.KeyVal[K, V]{node.parent.keyValues[nodeI-1]},
+					node.keyValues...)
+				node.parent.keyValues[nodeI-1] = leftNode.keyValues[len(leftNode.keyValues)-1]
+				leftNode.keyValues = leftNode.keyValues[:len(leftNode.keyValues)-1]
+				return
+			}
+			if nodeI < len(node.parent.keyValues) &&
+				len(node.parent.children[nodeI+1].MostLeftLeaf().keyValues) > tree.MinElementsCnt {
+				// Borrow element from right
+				rightNode := node.parent.children[nodeI+1].MostLeftLeaf()
+				node.keyValues = append(node.keyValues, node.parent.keyValues[nodeI])
+				node.parent.keyValues[nodeI] = rightNode.keyValues[0]
+				rightNode.keyValues = rightNode.keyValues[1:]
+				return
+			}
+
+			// Merge left
+			if nodeI > 0 {
+				leftNode := node.parent.children[nodeI-1].MostRightLeaf()
+				leftNode.keyValues = append(
+					append(leftNode.keyValues, node.parent.keyValues[nodeI-1]),
+					node.keyValues...,
+				)
+				if nodeI < len(node.parent.keyValues) {
+					node.parent.children = Slice.ConcatBothCopy(node.parent.children[:nodeI], node.parent.children[nodeI+1:])
+					node.parent.keyValues = Slice.ConcatBothCopy(node.parent.keyValues[:nodeI-1], node.parent.keyValues[nodeI:])
+				} else {
+					node.parent.children = node.parent.children[:nodeI]
+					node.parent.keyValues = node.parent.keyValues[:nodeI-1]
+				}
+				if len(node.parent.keyValues) == 0 {
+					node.parent.keyValues = node.parent.children[nodeI-1].keyValues
+					node.parent.children = node.parent.children[nodeI-1].children
+					for _, child := range node.parent.children {
+						child.parent = node.parent
+					}
+				}
+				return
+			}
+			// Merge right
+			if nodeI < len(node.parent.keyValues) {
+				rightNode := node.parent.children[nodeI+1].MostLeftLeaf()
+				rightNode.keyValues = Slice.InsertCopy(node.keyValues, rightNode.keyValues, node.parent.keyValues[nodeI])
+				if nodeI > 0 {
+					node.parent.children = Slice.ConcatBothCopy(node.parent.children[:nodeI], node.parent.children[nodeI+1:])
+					node.parent.keyValues = Slice.ConcatBothCopy(node.parent.keyValues[:nodeI-1], node.parent.keyValues[nodeI:])
+				} else {
+					node.parent.children = node.parent.children[1:]
+					node.parent.keyValues = node.parent.keyValues[1:]
+				}
+				if len(node.parent.keyValues) == 0 {
+					node.parent.keyValues = node.parent.children[nodeI].keyValues
+					node.parent.children = node.parent.children[nodeI].children
+					for _, child := range node.parent.children {
+						child.parent = node.parent
+					}
+				}
+				return
+			}
+		}
+	}
+}
+
 func (cur *Node[K, V]) GoTree(root *gotree.Tree) {
-	if len(cur.keys) == 0 {
+	if len(cur.keyValues) == 0 {
 		(*root).Add("x")
 	}
 	var last gotree.Tree = nil
-	for i, k := range cur.keys {
-		if i < len(cur.children) {
+	n := len(cur.keyValues)
+	for i := n - 1; i >= 0; i-- {
+		if len(cur.children) > 0 {
 			last = (*root).Add("")
-			cur.children[i].GoTree(&last)
+			cur.children[i+1].GoTree(&last)
 		}
-		(*root).Add(fmt.Sprint(k, " : ", cur.values[i]))
+		(*root).Add(fmt.Sprint(cur.keyValues[i]))
 	}
 	if len(cur.children) > 0 {
 		last = (*root).Add("")
-		cur.children[len(cur.children)-1].GoTree(&last)
+		cur.children[0].GoTree(&last)
 	}
 }
 
@@ -217,25 +329,20 @@ func (tree *BTree[K, V]) String() string {
 	return root.Print()
 }
 
-func main() {
-	tree := Init[int32, int32](3, 3)
+func (cur *Node[K, V]) SortedSlice() (slice []GTypes.KeyVal[K, V]) {
+	if len(cur.children) == 0 {
+		return Slice.Copy(cur.keyValues)
+	}
 
-	res, _, _ := tree.Search(2)
-	fmt.Println(res)
-	tree.Add(3, 0)
-	fmt.Println(tree)
-	tree.Add(2, 1)
-	fmt.Println(tree)
-	tree.Add(3, 2)
-	fmt.Println(tree)
-	tree.Add(5, 3)
-	fmt.Println(tree)
-	res, _, _ = tree.Search(2)
-	fmt.Println(res)
-	tree.Add(8, 4)
-	fmt.Println(tree)
-	tree.Add(-2, 5)
-	fmt.Println(tree)
-	tree.Add(4, 6)
-	fmt.Println(tree)
+	for i, child := range cur.children {
+		slice = append(slice, child.SortedSlice()...)
+		if i < len(cur.children)-1 {
+			slice = append(slice, cur.keyValues[i])
+		}
+	}
+	return
+}
+
+func (tree *BTree[K, V]) SortedSlice() []GTypes.KeyVal[K, V] {
+	return tree.root.SortedSlice()
 }
