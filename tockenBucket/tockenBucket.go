@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"encoding/binary"
+	"time"
+)
 
 type TokenBucket struct {
 	rateLimit          int64
@@ -34,5 +37,23 @@ func (tb *TokenBucket) isReqValid() bool {
 
 	tb.currentNumOfTokens++
 	return true
+
+}
+
+// niz:  rateLimit-maxNumOfTokens-currentNumOfTokens-timestamp
+func (tb *TokenBucket) toBytes() []byte {
+	retVal := make([]byte, 32)
+	binary.LittleEndian.PutUint64(retVal[0:], uint64(tb.rateLimit))
+	binary.LittleEndian.PutUint64(retVal[8:], tb.maxNumOfTokens)
+	binary.LittleEndian.PutUint64(retVal[16:], tb.currentNumOfTokens)
+	binary.LittleEndian.PutUint64(retVal[24:], uint64(tb.timestamp))
+	return retVal
+}
+
+func (tb *TokenBucket) fromBytes(bytes []byte) {
+	tb.rateLimit = int64(binary.LittleEndian.Uint64(bytes[0:8]))
+	tb.maxNumOfTokens = binary.LittleEndian.Uint64(bytes[8:16])
+	tb.currentNumOfTokens = binary.LittleEndian.Uint64(bytes[16:24])
+	tb.timestamp = int64(binary.LittleEndian.Uint64(bytes[24:32]))
 
 }
