@@ -2,10 +2,11 @@ package b_tree
 
 import (
 	"fmt"
-	"github.com/disiqueira/gotree"
-	"golang.org/x/exp/constraints"
 	GTypes "nosql-engine/packages/utils/generic-types"
 	Slice "nosql-engine/packages/utils/slice-utils"
+
+	"github.com/disiqueira/gotree"
+	"golang.org/x/exp/constraints"
 )
 
 // Node B-Tree node - don't create them by yourself - use BTree
@@ -91,7 +92,7 @@ func (tree *BTree[K, V]) Set(key K, value V) (newElementAdded bool) {
 		return false
 	}
 
-	kv := GTypes.KeyVal[K, V]{key, value}
+	kv := GTypes.KeyVal[K, V]{Key: key, Value: value}
 	// Common insertion
 	if i == len(node.keyValues) {
 		node.keyValues = append(node.keyValues, kv)
@@ -195,7 +196,6 @@ func (tree *BTree[K, V]) fightOverflowInNode(node *Node[K, V], index int) {
 			tree.fightOverflowInNode(node.parent, index)
 		}
 	}
-	return
 }
 
 func (tree *BTree[K, V]) Remove(key K) (removed bool) {
