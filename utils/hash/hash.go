@@ -3,6 +3,8 @@ package hash
 import (
 	"crypto/md5"
 	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"time"
 )
 
@@ -26,4 +28,17 @@ func CreateHashFunctions(k uint) []HashWithSeed {
 		h[i] = hfn
 	}
 	return h
+}
+
+func GetMD5Hash(text string) string {
+	hash := md5.Sum([]byte(text))
+	return hex.EncodeToString(hash[:])
+}
+
+func ToBinary(s string) string {
+	res := ""
+	for _, c := range s {
+		res = fmt.Sprintf("%s%.8b", res, c)
+	}
+	return res
 }

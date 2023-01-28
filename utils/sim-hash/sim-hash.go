@@ -1,24 +1,9 @@
 package simhash
 
 import (
-	"crypto/md5"
-	"encoding/hex"
-	"fmt"
+	"nosql-engine/packages/utils/hash"
 	"strings"
 )
-
-func getMD5Hash(text string) string {
-	hash := md5.Sum([]byte(text))
-	return hex.EncodeToString(hash[:])
-}
-
-func toBinary(s string) string {
-	res := ""
-	for _, c := range s {
-		res = fmt.Sprintf("%s%.8b", res, c)
-	}
-	return res
-}
 
 type SimHash struct {
 	bits uint
@@ -50,7 +35,7 @@ func (sh *SimHash) getFingerprint(tokens []string, weights map[string]int) strin
 	sum := make([]int, sh.bits)
 
 	for _, token := range tokens {
-		tokenBin := toBinary(getMD5Hash(token))
+		tokenBin := hash.ToBinary(hash.GetMD5Hash(token))
 
 		for i := 0; i < int(sh.bits); i++ {
 			if tokenBin[i] == '1' {
