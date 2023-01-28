@@ -2,8 +2,9 @@ package b_tree
 
 import (
 	"fmt"
-	"golang.org/x/exp/rand"
 	"testing"
+
+	"golang.org/x/exp/rand"
 )
 
 func TestBTreeOnRandomSample(t *testing.T) {
@@ -24,7 +25,6 @@ func TestBTreeOnRandomSample(t *testing.T) {
 			tree.Set(key, value)
 			a[key] = value
 			fmt.Println(tree)
-			break
 		case 1:
 			fmt.Println("Gde", key)
 			v := a[key]
@@ -37,13 +37,11 @@ func TestBTreeOnRandomSample(t *testing.T) {
 				fmt.Println("Expected:", a[key], "Got:", kv)
 				t.Fatalf("Found wrong key")
 			}
-			break
 		case 2:
 			fmt.Println("Del", key)
 			delete(a, key)
 			tree.Remove(key)
 			fmt.Println(tree)
-			break
 		}
 	}
 
