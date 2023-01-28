@@ -1,10 +1,11 @@
-package main
+package memtable
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {

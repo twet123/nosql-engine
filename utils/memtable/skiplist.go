@@ -1,23 +1,25 @@
-package main
+package memtable
 
 import (
 	"fmt"
 	"math/rand"
+
+	"golang.org/x/exp/constraints"
 )
 
-type SkipList struct {
+type SkipList[K constraints.Ordered, V any] struct {
 	maxHeight int
-	sentinel  *SkipListNode
+	sentinel  *SkipListNode[K, V]
 	size      int
 }
 
-type SkipListNode struct {
-	key   string
-	value MemTableElem
-	next  []*SkipListNode
+type SkipListNode[K constraints.Ordered, V any] struct {
+	key   K
+	value MemTableElem[K, V]
+	next  []*SkipListNode[K, V]
 }
 
-func (sl *SkipList) roll() int {
+func (sl *SkipList[K, V]) roll() int {
 	level := 1
 	for {
 		if rand.Int31n(10) > 4 {
@@ -31,7 +33,7 @@ func (sl *SkipList) roll() int {
 	return level
 }
 
-func (sl *SkipList) Search(key string) bool {
+func (sl *SkipList[K, V]) Search(key K) bool {
 	cursor := sl.sentinel
 	for i := sl.maxHeight - 1; i > -1; i-- {
 		if cursor.next[i] == nil {
@@ -52,9 +54,9 @@ func (sl *SkipList) Search(key string) bool {
 	return false
 }
 
-func (sl *SkipList) search2(key string) (bool, []*SkipListNode) {
+func (sl *SkipList[K, V]) search2(key K) (bool, []*SkipListNode[K, V]) {
 	cursor := sl.sentinel
-	retlist := make([]*SkipListNode, 0)
+	retlist := make([]*SkipListNode[K, V], 0)
 	for i := sl.maxHeight - 1; i > -1; i-- {
 		if cursor.next[i] == nil {
 			retlist = append(retlist, cursor)
@@ -80,7 +82,7 @@ func (sl *SkipList) search2(key string) (bool, []*SkipListNode) {
 	return false, retlist
 }
 
-func (sl *SkipList) Insert(elem MemTableElem) bool {
+func (sl *SkipList[K, V]) Insert(elem MemTableElem[K, V]) bool {
 	key := elem.key
 	found, lista := sl.search2(key)
 	if found {
@@ -88,7 +90,7 @@ func (sl *SkipList) Insert(elem MemTableElem) bool {
 	}
 	level := sl.roll()
 	lista = reverse(lista)
-	novi := SkipListNode{key: key, next: make([]*SkipListNode, level), value: elem}
+	novi := SkipListNode[K, V]{key: key, next: make([]*SkipListNode[K, V], level), value: elem}
 	for i := 0; i < level; i++ {
 		novi.next[i] = lista[i].next[i]
 		lista[i].next[i] = &novi
@@ -97,7 +99,7 @@ func (sl *SkipList) Insert(elem MemTableElem) bool {
 	return true
 }
 
-func (sl *SkipList) Update(elem MemTableElem) bool {
+func (sl *SkipList[K, V]) Update(elem MemTableElem[K, V]) bool {
 	key := elem.key
 	found, lista := sl.search2(key)
 	if !found {
@@ -110,7 +112,7 @@ func (sl *SkipList) Update(elem MemTableElem) bool {
 	return true
 }
 
-func (sl *SkipList) Delete(key string) bool {
+func (sl *SkipList[K, V]) Delete(key K) bool {
 	found, lista := sl.search2(key)
 	if !found {
 		return false
@@ -134,7 +136,7 @@ func (sl *SkipList) Delete(key string) bool {
 	return true
 }
 
-func (sl *SkipList) Print() {
+func (sl *SkipList[K, V]) Print() {
 	cursor := sl.sentinel.next[0]
 	for ; cursor != nil; cursor = cursor.next[0] {
 		fmt.Print(cursor.key)
@@ -143,43 +145,20 @@ func (sl *SkipList) Print() {
 	fmt.Println()
 }
 
-func (sl *SkipList) Clear() {
-	tmp := makeNew(sl.maxHeight)
+func (sl *SkipList[K, V]) Clear() {
+	tmp := MakeNew[K, V](sl.maxHeight)
 	sl = &tmp
 }
 
-func makeNew(maxHeight int) SkipList {
-	sentinel := &SkipListNode{next: make([]*SkipListNode, maxHeight)}
-	sl := SkipList{sentinel: sentinel, maxHeight: maxHeight, size: 0}
+func MakeNew[K constraints.Ordered, V any](maxHeight int) SkipList[K, V] {
+	sentinel := &SkipListNode[K, V]{next: make([]*SkipListNode[K, V], maxHeight)}
+	sl := SkipList[K, V]{sentinel: sentinel, maxHeight: maxHeight, size: 0}
 	return sl
 }
 
-func reverse(lista []*SkipListNode) []*SkipListNode {
+func reverse[K constraints.Ordered, V any](lista []*SkipListNode[K, V]) []*SkipListNode[K, V] {
 	for i := 0; i < len(lista)/2; i++ {
 		lista[i] = lista[len(lista)-1-i]
 	}
 	return lista
 }
-
-/*func main() {
-	sl := makeSkipList(15)
-	niz := make([]string, 0)
-	for i := 0; i < 20; i++ {
-		a := int(rand.Int31n(2000))
-		niz = append(niz, string(rune(a)))
-		sl.Insert(string(rune(a)))
-	}
-
-	fmt.Println("-------------------")
-	sl.Print()
-	fmt.Println("-------------------")
-
-	for i := 0; i < len(niz); i++ {
-		sl.Delete(niz[i])
-		fmt.Println("-------------------")
-		sl.Print()
-		fmt.Println("-------------------")
-	}
-
-	fmt.Println(sl.size)
-}*/

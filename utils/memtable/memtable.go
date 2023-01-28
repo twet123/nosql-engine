@@ -1,21 +1,28 @@
-package main
+package memtable
 
-type MemTable struct {
+import (
+	"fmt"
+	b_tree "nosql-engine/packages/utils/btree"
+
+	"golang.org/x/exp/constraints"
+)
+
+type MemTable[K constraints.Ordered, V any] struct {
 	struktura   string
 	maxCapacity int
 	capacity    int
-	stablo      BTree
-	lista       SkipList
+	stablo      b_tree.BTree[K, MemTableElem[K, V]]
+	lista       SkipList[K, V]
 }
 
-type MemTableElem struct {
+type MemTableElem[K comparable, V any] struct {
 	tombstone byte
-	key       string
-	value     []byte
+	key       K
+	value     V
 	timestamp uint64
 }
 
-func (mt *MemTable) Insert(elem MemTableElem) {
+func (mt *MemTable[K, V]) Insert(elem MemTableElem[K, V]) {
 	if mt.struktura == "btree" {
 		mt.insertBTree(elem)
 	}
@@ -23,7 +30,7 @@ func (mt *MemTable) Insert(elem MemTableElem) {
 		mt.insertSkipList(elem)
 	}
 }
-func (mt *MemTable) insertSkipList(elem MemTableElem) {
+func (mt *MemTable[K, V]) insertSkipList(elem MemTableElem[K, V]) {
 	if !mt.lista.Search(elem.key) {
 		if mt.lista.Insert(elem) {
 			mt.capacity++
@@ -33,17 +40,15 @@ func (mt *MemTable) insertSkipList(elem MemTableElem) {
 	}
 }
 
-func (mt *MemTable) insertBTree(elem MemTableElem) {
-	if !mt.stablo.Search(elem.key) {
-		if mt.stablo.Insert(elem) {
-			mt.capacity++
-		}
-	} else {
-		mt.stablo.Update(elem)
+func (mt *MemTable[K, V]) insertBTree(elem MemTableElem[K, V]) {
+	found, _, _ := mt.stablo.Search(elem.key)
+	if !found {
+		mt.capacity++
 	}
+	mt.stablo.Set(elem.key, elem)
 }
 
-func (mt *MemTable) Delete(elem MemTableElem) {
+func (mt *MemTable[K, V]) Delete(elem MemTableElem[K, V]) {
 	elem.tombstone = 0
 	if mt.struktura == "btree" {
 		mt.deleteBTree(elem)
@@ -53,26 +58,26 @@ func (mt *MemTable) Delete(elem MemTableElem) {
 	}
 }
 
-func (mt *MemTable) deleteBTree(elem MemTableElem) {
-	mt.stablo.Update(elem)
+func (mt *MemTable[K, V]) deleteBTree(elem MemTableElem[K, V]) {
+	mt.stablo.Set(elem.key, elem)
 }
 
-func (mt *MemTable) deleteSkipList(elem MemTableElem) {
+func (mt *MemTable[K, V]) deleteSkipList(elem MemTableElem[K, V]) {
 	mt.lista.Update(elem)
 }
 
-func (mt *MemTable) Flush() {
+func (mt *MemTable[K, V]) Flush() {
 	if mt.struktura == "btree" {
-		mt.stablo.Print()
+		fmt.Println(mt.stablo.SortedSlice())
 	}
 	if mt.struktura == "skiplist" {
 		mt.lista.Print()
 	}
-	mt.stablo = createTree(3)
-	mt.lista = makeNew(15)
+	mt.stablo = *b_tree.Init[K, MemTableElem[K, V]](2, 4)
+	mt.lista = MakeNew[K, V](15)
 	mt.capacity = 0
 }
-func createMemTable(cap int, tip string) MemTable {
-	sl := makeNew(15)
-	return MemTable{struktura: tip, capacity: 0, lista: sl, stablo: createTree(3), maxCapacity: cap}
+func CreateMemTable[K constraints.Ordered, V any](cap int, tip string) MemTable[K, V] {
+	sl := MakeNew[K, V](15)
+	return MemTable[K, V]{struktura: tip, capacity: 0, lista: sl, stablo: *b_tree.Init[K, MemTableElem[K, V]](2, 4), maxCapacity: cap}
 }

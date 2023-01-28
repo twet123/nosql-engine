@@ -6,7 +6,7 @@ import (
 )
 
 func TestSkipList_Insert_Delete_Big_Data(t *testing.T) {
-	sl := makeSkipList(15)
+	sl := MakeSkipList[int, string](15)
 	niz := make([]int, 0)
 	for i := 0; i < 100; i++ {
 		a := int(rand.Int31n(2000))
@@ -23,7 +23,7 @@ func TestSkipList_Insert_Delete_Big_Data(t *testing.T) {
 }
 
 func TestSkipList_Search(t *testing.T) {
-	sl := makeSkipList(15)
+	sl := MakeSkipList[int, string](15)
 	if sl.Search(15) {
 		t.Fatalf("Search failed")
 	}

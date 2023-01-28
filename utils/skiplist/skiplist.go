@@ -3,21 +3,23 @@ package main
 import (
 	"fmt"
 	"math/rand"
+
+	"golang.org/x/exp/constraints"
 )
 
-type SkipList struct {
+type SkipList[K constraints.Ordered, V any] struct {
 	maxHeight int
-	sentinel  *SkipListNode
+	sentinel  *SkipListNode[K, V]
 	size      int
 }
 
-type SkipListNode struct {
+type SkipListNode[K constraints.Ordered, V any] struct {
 	key   int
 	value string
-	next  []*SkipListNode
+	next  []*SkipListNode[K, V]
 }
 
-func (sl *SkipList) roll() int {
+func (sl *SkipList[K, V]) roll() int {
 	level := 1
 	for {
 		if rand.Int31n(10) > 4 {
@@ -31,7 +33,7 @@ func (sl *SkipList) roll() int {
 	return level
 }
 
-func (sl *SkipList) Search(key int) bool {
+func (sl *SkipList[K, V]) Search(key int) bool {
 	cursor := sl.sentinel
 	for i := sl.maxHeight - 1; i > -1; i-- {
 		if cursor.next[i] == nil {
@@ -52,9 +54,9 @@ func (sl *SkipList) Search(key int) bool {
 	return false
 }
 
-func (sl *SkipList) search2(key int) (bool, []*SkipListNode) {
+func (sl *SkipList[K, V]) search2(key int) (bool, []*SkipListNode[K, V]) {
 	cursor := sl.sentinel
-	retlist := make([]*SkipListNode, 0)
+	retlist := make([]*SkipListNode[K, V], 0)
 	for i := sl.maxHeight - 1; i > -1; i-- {
 		if cursor.next[i] == nil {
 			retlist = append(retlist, cursor)
@@ -80,14 +82,14 @@ func (sl *SkipList) search2(key int) (bool, []*SkipListNode) {
 	return false, retlist
 }
 
-func (sl *SkipList) Insert(key int) bool {
+func (sl *SkipList[K, V]) Insert(key int) bool {
 	found, lista := sl.search2(key)
 	if found {
 		return false
 	}
 	level := sl.roll()
 	lista = reverse(lista)
-	novi := SkipListNode{key: key, next: make([]*SkipListNode, level)}
+	novi := SkipListNode[K, V]{key: key, next: make([]*SkipListNode[K, V], level)}
 	for i := 0; i < level; i++ {
 		novi.next[i] = lista[i].next[i]
 		lista[i].next[i] = &novi
@@ -96,7 +98,7 @@ func (sl *SkipList) Insert(key int) bool {
 	return true
 }
 
-func (sl *SkipList) Delete(key int) bool {
+func (sl *SkipList[K, V]) Delete(key int) bool {
 	found, lista := sl.search2(key)
 	if !found {
 		return false
@@ -120,7 +122,7 @@ func (sl *SkipList) Delete(key int) bool {
 	return true
 }
 
-func (sl *SkipList) Print() {
+func (sl *SkipList[K, V]) Print() {
 	cursor := sl.sentinel.next[0]
 	for ; cursor != nil; cursor = cursor.next[0] {
 		fmt.Print(cursor.key)
@@ -129,13 +131,13 @@ func (sl *SkipList) Print() {
 	fmt.Println()
 }
 
-func makeSkipList(maxHeight int) SkipList {
-	sentinel := &SkipListNode{next: make([]*SkipListNode, maxHeight)}
-	sl := SkipList{sentinel: sentinel, maxHeight: maxHeight, size: 0}
+func MakeSkipList[K constraints.Ordered, V any](maxHeight int) SkipList[K, V] {
+	sentinel := &SkipListNode[K, V]{next: make([]*SkipListNode[K, V], maxHeight)}
+	sl := SkipList[K, V]{sentinel: sentinel, maxHeight: maxHeight, size: 0}
 	return sl
 }
 
-func reverse(lista []*SkipListNode) []*SkipListNode {
+func reverse[K constraints.Ordered, V any](lista []*SkipListNode[K, V]) []*SkipListNode[K, V] {
 	for i := 0; i < len(lista)/2; i++ {
 		lista[i] = lista[len(lista)-1-i]
 	}
@@ -143,7 +145,7 @@ func reverse(lista []*SkipListNode) []*SkipListNode {
 }
 
 func main() {
-	sl := makeSkipList(15)
+	sl := MakeSkipList[int, string](15)
 	niz := make([]int, 0)
 	for i := 0; i < 20; i++ {
 		a := int(rand.Int31n(2000))
