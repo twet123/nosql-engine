@@ -1,11 +1,11 @@
-package main
+package wal
 
 import (
 	"fmt"
 	"math"
 	"math/rand"
-	"nosql-engine/packages/utils/wal"
 	"os"
+	"testing"
 	"time"
 )
 
@@ -19,15 +19,13 @@ func randSeq(n int) string {
 	return string(b)
 }
 
-func main() {
-	fmt.Println("test")
-
+func TestWAL(t *testing.T) {
 	rand.Seed(time.Now().UnixNano())
 	elementsCnt := 100
 	segmentSize := 20
-	path := "../../data/wal/"
+	path := "../../data/testWal/"
 
-	wal := wal.New(path, uint32(segmentSize), 10)
+	wal := New(path, uint32(segmentSize), 10)
 	randomStr := make([]string, elementsCnt)
 
 	for i := 0; i < elementsCnt; i++ {
@@ -36,10 +34,12 @@ func main() {
 	}
 
 	for i := 0; i < int(math.Ceil(float64(elementsCnt)/float64(segmentSize))); i++ {
-		_, error := os.Stat(path + "log_" + fmt.Sprint(i) + ".bin")
+		_, error := os.Stat(path + "log_" + fmt.Sprint(i+1) + ".bin")
 
 		if os.IsNotExist(error) {
-			fmt.Println("error nema ga")
+			t.Fatalf("File " + path + "log_" + fmt.Sprint(i+1) + ".bin" + " does not exist!")
 		}
 	}
+
+	os.RemoveAll(path)
 }
