@@ -1,28 +1,44 @@
 package skiplist
 
 import (
+	"math/rand"
+	"nosql-engine/packages/utils/database"
 	"testing"
+	"time"
 )
 
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+
 func TestSkipList(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
 	maxHeight := 32
+	elementsCnt := 100
 
 	skipList := New(maxHeight)
+	randomStr := make([]string, elementsCnt)
 
-	skipList.Add("vlada", []byte("vladaVal"))
-	skipList.Add("balsa", []byte("balsaVal"))
-	skipList.Add("teodor", []byte("teodorVal"))
+	for i := 0; i < elementsCnt; i++ {
+		randomStr[i] = randSeq(10)
+		newElem := &database.DatabaseElem{Value: []byte(randomStr[i]), Tombstone: 0, Timestamp: uint64(time.Now().Unix())}
+		skipList.Add(randomStr[i], *newElem)
+	}
 
-	if skipList.Find("vlada").key != "vlada" {
-		t.Fatalf("Skip list failed for key 'vlada'")
+	for i := 0; i < elementsCnt; i++ {
+		if skipList.Find(randomStr[i]) == nil {
+			t.Fatalf("SkipList failed for key " + randomStr[i])
+		}
 	}
-	if skipList.Find("balsa").key != "balsa" {
-		t.Fatalf("Skip list failed for key 'balsa'")
-	}
-	if skipList.Find("teodor").key != "teodor" {
-		t.Fatalf("Skip list failed for key 'teodor'")
-	}
-	if skipList.Find("empty") != nil {
-		t.Fatalf("Skip list failed for key 'empty'")
+
+	skipList.PrintLevels()
+	if len(skipList.Flush()) < elementsCnt {
+		t.Fatalf("SkipList flush failed")
 	}
 }

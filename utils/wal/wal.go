@@ -238,45 +238,68 @@ func (w *WAL) PutEntry(key string, value []byte, tombstone byte) bool {
 }
 
 func (w *WAL) RemoveOldSegments() {
-	segments, err := os.ReadDir(w.path)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(len(segments))
-	for i := 0; i < len(segments); i++ {
-		if uint32(i) < w.lowWaterMark {
-			fmt.Println(i)
-			fmt.Println(w.path + segments[i].Name())
-			err = os.Remove(w.path + segments[i].Name())
+	numOfSegments := w.numberOfSegments
+	for i := 1; i <= numOfSegments; i++ {
+		if uint32(i) <= w.lowWaterMark {
+			err := os.Remove(w.path + "log_" + strconv.Itoa(i) + ".bin")
+
 			if err != nil {
 				panic(err)
 			}
 			w.numberOfSegments--
 
 		} else {
-			err := os.Rename(w.path+segments[i].Name(), w.path+"log_"+strconv.Itoa(i-int(w.lowWaterMark)+1)+".bin")
+			err := os.Rename(w.path+"log_"+strconv.Itoa(i)+".bin", w.path+"log_"+strconv.Itoa(i-int(w.lowWaterMark))+".bin")
 			if err != nil {
 				panic(err)
 			}
-			w.currentSegment = w.path + "log_" + strconv.Itoa(i-int(w.lowWaterMark)+1) + ".bin"
+			w.currentSegment = w.path + "log_" + strconv.Itoa(i-int(w.lowWaterMark)) + ".bin"
 		}
 	}
 	w.numberOfEntries = w.getTotalEntries()
 }
 
 func (w *WAL) EmptyWAL() {
-	segments, err := os.ReadDir(w.path)
-	if err != nil {
-		panic(err)
+	for i := 1; i <= w.numberOfSegments; i++ {
+		if i < w.numberOfSegments {
+			err := os.Remove(w.path + "log_" + strconv.Itoa(i) + ".bin")
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			err := os.Rename(w.path+"log_"+strconv.Itoa(i)+".bin", w.path+"log_1.bin")
+			if err != nil {
+				panic(err)
+			}
+			w.currentSegment = w.path + "log_1.bin"
+		}
 	}
-	//fmt.Println(len(segments))
-	for i := 0; i < len(segments); i++ {
-		//fmt.Println(w.path + segments[i].Name())
-		err := os.Remove(w.path + segments[i].Name())
+	w.numberOfSegments = 1
+}
+
+// vraca listu logova procitanih sa diska (na pocetku liste najstariji logovi)
+func (w *WAL) readAllEntries() []WALEntry {
+
+	entries := make([]WALEntry, 0)
+
+	for i := 1; i <= w.numberOfSegments; i++ {
+		f, err := os.OpenFile(w.path+"log_"+strconv.Itoa(i)+".bin", os.O_RDONLY, 0777)
 		if err != nil {
 			panic(err)
 		}
+
+		reader := bufio.NewReader(f)
+
+		for {
+			entry, err1 := decode(reader)
+			if err1 == nil {
+				entries = append(entries, entry)
+			} else {
+				f.Close()
+				break
+			}
+		}
+
 	}
-	w.numberOfSegments = 0
-	w.newSegment()
+	return entries
 }
