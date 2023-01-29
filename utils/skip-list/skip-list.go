@@ -130,7 +130,6 @@ func (s *SkipList) Remove(key string) bool {
 	}
 
 	s.Add(key, *newElem)
-	s.size++
 	return true
 }
 
@@ -161,4 +160,12 @@ func (s *SkipList) Flush() []generic_types.KeyVal[string, database.DatabaseElem]
 	}
 
 	return elems
+}
+
+func NodeToElem(node SkipListNode) *database.DatabaseElem {
+	return &database.DatabaseElem{
+		Value:     node.value,
+		Tombstone: node.tombstone,
+		Timestamp: node.timestamp,
+	}
 }
