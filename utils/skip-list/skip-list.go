@@ -3,6 +3,9 @@ package skiplist
 import (
 	"fmt"
 	"math/rand"
+	"nosql-engine/packages/utils/database"
+	generic_types "nosql-engine/packages/utils/generic-types"
+	"time"
 )
 
 type SkipList struct {
@@ -13,9 +16,11 @@ type SkipList struct {
 }
 
 type SkipListNode struct {
-	key   string
-	value []byte
-	next  []*SkipListNode
+	key       string
+	value     []byte
+	tombstone byte
+	timestamp uint64
+	next      []*SkipListNode
 }
 
 func New(maxHeight int) *SkipList {
@@ -70,9 +75,13 @@ func (s *SkipList) Find(key string) *SkipListNode {
 	return nil
 }
 
-func (s *SkipList) Add(key string, value []byte) bool {
+func (s *SkipList) Add(key string, elem database.DatabaseElem) bool {
 	// check if element is already there if it is update the timestamp and data
-	if s.Find(key) != nil {
+	oldElem := s.Find(key)
+	if oldElem != nil {
+		oldElem.value = elem.Value
+		oldElem.timestamp = uint64(time.Now().Unix())
+
 		return false
 	}
 
@@ -83,9 +92,11 @@ func (s *SkipList) Add(key string, value []byte) bool {
 	}
 
 	newNode := &SkipListNode{
-		key:   key,
-		value: value,
-		next:  make([]*SkipListNode, s.maxHeight),
+		key:       key,
+		value:     elem.Value,
+		tombstone: elem.Tombstone,
+		timestamp: uint64(time.Now().Unix()),
+		next:      make([]*SkipListNode, s.maxHeight),
 	}
 
 	// start from the level of insertion and insert downwards
@@ -102,8 +113,30 @@ func (s *SkipList) Add(key string, value []byte) bool {
 	return true
 }
 
+// returns true if capacity has to be updated
+func (s *SkipList) Remove(key string) bool {
+	oldElem := s.Find(key)
+
+	if oldElem != nil {
+		oldElem.tombstone = 1
+
+		return false
+	}
+
+	newElem := &database.DatabaseElem{
+		Value:     []byte(""),
+		Tombstone: 1,
+		Timestamp: uint64(time.Now().Unix()),
+	}
+
+	s.Add(key, *newElem)
+	s.size++
+	return true
+}
+
 func (s *SkipList) PrintLevels() {
 	for i := s.maxHeight - 1; i >= 0; i-- {
+		fmt.Println("------------- LEVEL " + fmt.Sprint(i) + " -------------")
 		current := s.head
 		for current != nil {
 			fmt.Println(current.key)
@@ -111,4 +144,21 @@ func (s *SkipList) PrintLevels() {
 			current = current.next[i]
 		}
 	}
+}
+
+func (s *SkipList) Flush() []generic_types.KeyVal[string, database.DatabaseElem] {
+	elems := make([]generic_types.KeyVal[string, database.DatabaseElem], s.size)
+	current := s.head
+	current = current.next[0]
+
+	for i := 0; i < s.size; i++ {
+		elems[i].Key = current.key
+		elems[i].Value.Value = current.value
+		elems[i].Value.Tombstone = current.tombstone
+		elems[i].Value.Timestamp = current.timestamp
+
+		current = current.next[0]
+	}
+
+	return elems
 }
