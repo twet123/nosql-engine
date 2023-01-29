@@ -1,7 +1,9 @@
 package bloomfilter
 
 import (
+	"encoding/binary"
 	"nosql-engine/packages/utils/hash"
+	"os"
 
 	"github.com/golang-collections/go-datastructures/bitarray"
 )
@@ -44,4 +46,23 @@ func (bf *BloomFilter) Find(key string) bool {
 	}
 
 	return true
+}
+
+func (bf *BloomFilter) MakeFile(name string) {
+	file, err := os.Create(name)
+	if err != nil {
+		panic(err)
+	}
+	a := make([]byte, 4, 4)
+	binary.LittleEndian.PutUint32(a, uint32(bf.m))
+	file.Write(a)
+	binary.LittleEndian.PutUint32(a, uint32(bf.k))
+	file.Write(a)
+	/*file.Write(bf.bits)
+	for _, fn := range bf.fns {
+		binary.LittleEndian.PutUint32(a, uint32(len(fn.Seed)))
+		file.Write(a)
+		file.Write(fn.Seed)
+	}*/
+	file.Close()
 }
