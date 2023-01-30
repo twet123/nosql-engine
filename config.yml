@@ -1,0 +1,7 @@
+wal_segment_size: 20
+memtable_size: 20
+memtable_structure: skiplist
+btree_min: 2
+btree_max: 4
+skiplist_levels: 32
+# add more things as they come up to your mind
