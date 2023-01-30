@@ -1,5 +1,0 @@
-files/usertable-L0-1-Data.db
-files/usertable-L0-1-Index.db
-files/usertable-L0-1-Summary.db
-files/usertable-L0-1-Filter.db
-files/usertable-L0-1-Metadata.db
