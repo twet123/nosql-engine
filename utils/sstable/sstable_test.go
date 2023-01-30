@@ -15,9 +15,25 @@ func TestSStable(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		ts := time.Now().Unix()
 		key := "key" + strconv.Itoa(i)
-		val := db.DatabaseElem{Tombstone: 1, Value: []byte("nesto" + strconv.Itoa(i)), Timestamp: uint64(ts)}
+		val := db.DatabaseElem{Tombstone: 0, Value: []byte("nesto" + strconv.Itoa(i)), Timestamp: uint64(ts)}
 		dbelems = append(dbelems, GTypes.KeyVal[string, db.DatabaseElem]{Key: key, Value: val})
 	}
 
 	CreateSStable(dbelems, count, "files")
+}
+
+func TestFindKey(t *testing.T) {
+	prefix := "files/"
+	found, dbel := Find("key0", prefix)
+	if !found || dbel == nil {
+		t.Fatalf("find not working")
+	}
+	found, dbel = Find("key10", prefix)
+	if found {
+		t.Fatalf("find not working")
+	}
+	found, dbel = Find("key7", prefix)
+	if !found || dbel == nil {
+		t.Fatalf("find not working")
+	}
 }
