@@ -1,21 +1,50 @@
 package bloomfilter
 
-import "testing"
+import (
+	"math/rand"
+	"os"
+	"testing"
+	"time"
+)
+
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
 
 func TestBloomFilter(t *testing.T) {
-	bloomFiler := New(50, 0.01)
+	rand.Seed(time.Now().UnixNano())
+	elementsCnt := 100
+	bloomFiler := New(elementsCnt, 0.01)
+	randomStr := make([]string, elementsCnt)
 
-	bloomFiler.Add("vlada")
-	bloomFiler.Add("balsa")
-	bloomFiler.Add("teodor")
+	for i := 0; i < elementsCnt; i++ {
+		randomStr[i] = randSeq(10)
+		bloomFiler.Add(randomStr[i])
+	}
 
-	if !bloomFiler.Find("vlada") {
-		t.Fatalf("Bloom filter failed for key 'vlada'")
+	for i := 0; i < elementsCnt; i++ {
+		if !bloomFiler.Find(randomStr[i]) {
+			t.Fatalf("Bloom filter failed for key " + randomStr[i])
+		}
 	}
-	if !bloomFiler.Find("balsa") {
-		t.Fatalf("Bloom filter failed for key 'balsa'")
+
+	path := "../../data/filter/"
+	filename := "testFilter.bin"
+
+	bloomFiler.MakeFile(path, filename)
+	bloomFiler = NewFromFile(path + filename)
+
+	for i := 0; i < elementsCnt; i++ {
+		if !bloomFiler.Find(randomStr[i]) {
+			t.Fatalf("Bloom filter failed for key " + randomStr[i] + " after deserialization")
+		}
 	}
-	if !bloomFiler.Find("teodor") {
-		t.Fatalf("Bloom filter failed for key 'teodor'")
-	}
+
+	os.RemoveAll(path)
 }

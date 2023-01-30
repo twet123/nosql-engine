@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/binary"
 	"hash/crc32"
-	"io/ioutil"
 	"log"
 	"math"
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
@@ -213,7 +212,7 @@ func CRC32(data []byte) uint32 {
 }
 
 func defineOrder(prefix string) {
-	files, err := ioutil.ReadDir("./" + prefix)
+	files, err := os.ReadDir("./" + prefix)
 	if err != nil {
 		log.Fatal(err)
 	}
