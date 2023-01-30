@@ -1,6 +1,7 @@
 package sstable
 
 import (
+	"bufio"
 	"encoding/binary"
 	"hash/crc32"
 	"log"
@@ -11,6 +12,7 @@ import (
 	merkletree "nosql-engine/packages/utils/merkle-tree"
 	"os"
 	"strconv"
+	"strings"
 )
 
 var order = 0
@@ -64,9 +66,10 @@ func CreateSStable(array []GTypes.KeyVal[string, database.DatabaseElem], count i
 }
 
 func createFiles(st SSTable, prefix string) {
-	name := prefix + "/usertable-L0-" + strconv.Itoa(order) + "-"
-	// ispraviti ovde za prefix
-	st.bf.MakeFile("/data", name+"Filter.db")
+	name := "/usertable-L0-" + strconv.Itoa(order) + "-"
+	st.bf.MakeFile(prefix, name+"Filter.db")
+
+	name = prefix + name
 	arr := createDataFile(name, st)
 
 	for i := range st.index {
@@ -199,6 +202,7 @@ func createTOCFile(name string) {
 	file.WriteString(name + "Index.db\n")
 	file.WriteString(name + "Summary.db\n")
 	file.WriteString(name + "Filter.db\n")
+	file.WriteString(name + "Metadata.db\n")
 
 	file.Close()
 }
@@ -241,4 +245,184 @@ func defineOrder(prefix string) {
 	order++
 	st := order
 	st++
+}
+
+func Find(key string, prefix string) (bool, *database.DatabaseElem) {
+	filespath := prefix
+	files, err := ioutil.ReadDir("./" + filespath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, file := range files {
+		name := file.Name()
+		if !strings.Contains(name, "TOC") {
+			continue
+		}
+		fmap := readTOC(name, filespath)
+		bf := bloomfilter.NewFromFile(fmap["filter"])
+		found := bf.Find(key)
+		if !found {
+			continue
+		}
+		found, start, stop := checkSummary(key, fmap["summary"])
+		if !found {
+			continue
+		}
+		found, start = checkIndex(key, fmap["index"], start, stop)
+		if !found {
+			continue
+		}
+		deleted, dbel := readData(fmap["data"], start)
+		if deleted {
+			continue
+		}
+		return true, &dbel
+	}
+	return false, nil
+}
+
+func checkCRC(crc uint32, timestamp uint64, tombstone byte, key string, value []byte) bool {
+	byteslice := make([]byte, 0)
+	tmpbs := make([]byte, 8)
+
+	binary.LittleEndian.PutUint64(tmpbs, uint64(timestamp))
+	byteslice = append(byteslice, tmpbs...)
+
+	byteslice = append(byteslice, tombstone)
+
+	binary.LittleEndian.PutUint64(tmpbs, uint64(len(key)))
+	byteslice = append(byteslice, tmpbs...)
+	byteslice = append(byteslice, []byte(key)...)
+
+	binary.LittleEndian.PutUint64(tmpbs, uint64(len(value)))
+	byteslice = append(byteslice, tmpbs...)
+	byteslice = append(byteslice, value...)
+
+	return (crc == CRC32(byteslice))
+}
+
+func checkSummary(key string, filename string) (bool, uint64, uint64) { //returns range of index bytes where key may be
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	start := readKey(*file)
+	stop := readKey(*file)
+	if key < start || key > stop {
+		return false, 0, 0
+	}
+	prevoffset := uint64(0)
+	for {
+		filekey := readKey(*file)
+		offset := readUint64(*file)
+
+		if filekey == key {
+			return true, offset, offset
+		}
+		if filekey > key {
+			return true, prevoffset, offset
+		}
+		prevoffset = offset
+	}
+}
+
+func checkIndex(key string, filename string, start uint64, stop uint64) (bool, uint64) {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	file.Seek(int64(start), os.SEEK_SET)
+	for {
+		pos, _ := file.Seek(0, os.SEEK_CUR)
+		if stop < uint64(pos) {
+			return false, 0
+		}
+		filekey := readKey(*file)
+		offset := readUint64(*file)
+		if filekey == key {
+			return true, offset
+		}
+		if filekey > key {
+			return false, 0
+		}
+	}
+}
+
+func readData(filename string, offset uint64) (bool, database.DatabaseElem) {
+	readFile, err := os.Open(filename)
+	defer readFile.Close()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	readFile.Seek(int64(offset), os.SEEK_SET)
+	crc := readUint32(*readFile)
+	timestamp := readUint64(*readFile)
+	tombstone := readByte(*readFile)
+	key := readKey(*readFile)
+	length := readUint64(*readFile)
+	value := readBytes(*readFile, length)
+	equals := checkCRC(crc, timestamp, tombstone, key, value)
+	if !equals {
+		log.Fatal("crc not match values")
+	}
+	return tombstone == byte(1), database.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
+}
+
+func readKey(f os.File) string {
+	length := readUint64(f)
+	buffer := make([]byte, length)
+	f.Read(buffer)
+	key := string(buffer[:])
+	return key
+}
+
+func readUint64(f os.File) uint64 {
+	buffer := make([]byte, 8)
+	f.Read(buffer)
+	number := binary.LittleEndian.Uint64(buffer)
+	return number
+}
+
+func readUint32(f os.File) uint32 {
+	buffer := make([]byte, 4)
+	f.Read(buffer)
+	number := binary.LittleEndian.Uint32(buffer)
+	return number
+}
+func readByte(f os.File) byte {
+	buffer := make([]byte, 1)
+	f.Read(buffer)
+	return buffer[0]
+}
+
+func readBytes(f os.File, length uint64) []byte {
+	buffer := make([]byte, length)
+	f.Read(buffer)
+	return buffer
+}
+
+func readTOC(filename string, prefix string) map[string]string { //data, index, summary, filter
+	readFile, err := os.Open(prefix + "/" + filename)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileScanner := bufio.NewScanner(readFile)
+	fileScanner.Split(bufio.ScanLines)
+	var fileLines []string
+
+	for fileScanner.Scan() {
+		fileLines = append(fileLines, fileScanner.Text())
+	}
+
+	readFile.Close()
+
+	fmap := make(map[string]string)
+	fmap["data"] = fileLines[0]
+	fmap["index"] = fileLines[1]
+	fmap["summary"] = fileLines[2]
+	fmap["filter"] = fileLines[3]
+
+	return fmap
 }
