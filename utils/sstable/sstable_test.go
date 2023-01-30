@@ -19,5 +19,5 @@ func TestSStable(t *testing.T) {
 		dbelems = append(dbelems, GTypes.KeyVal[string, db.DatabaseElem]{Key: key, Value: val})
 	}
 
-	CreateSStable(dbelems, count)
+	CreateSStable(dbelems, count, "files")
 }
