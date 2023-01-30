@@ -3,7 +3,6 @@ package sstable
 import (
 	"encoding/binary"
 	"hash/crc32"
-	"io/ioutil"
 	"log"
 	"math"
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
@@ -66,7 +65,8 @@ func CreateSStable(array []GTypes.KeyVal[string, database.DatabaseElem], count i
 
 func createFiles(st SSTable, prefix string) {
 	name := prefix + "/usertable-L0-" + strconv.Itoa(order) + "-"
-	st.bf.MakeFile(name + "Filter.db")
+	// ispraviti ovde za prefix
+	st.bf.MakeFile("/data", name+"Filter.db")
 	arr := createDataFile(name, st)
 
 	for i := range st.index {
@@ -208,7 +208,7 @@ func CRC32(data []byte) uint32 {
 }
 
 func defineOrder(prefix string) {
-	files, err := ioutil.ReadDir("./" + prefix)
+	files, err := os.ReadDir("./" + prefix)
 	if err != nil {
 		log.Fatal(err)
 	}
