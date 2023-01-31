@@ -20,7 +20,7 @@ func TestSStable(t *testing.T) {
 		dbelems = append(dbelems, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: val})
 	}
 
-	CreateSStable(dbelems, count, "../../data/testTables")
+	CreateSStable(dbelems, count, "../../data/testTables", 1)
 }
 
 func TestFindKey(t *testing.T) {
