@@ -165,3 +165,7 @@ func (mt *MemTable) Flush() {
 
 	mt.capacity = 0
 }
+
+func (mt *MemTable) CheckFlushed() bool {
+	return mt.capacity == 0
+}
