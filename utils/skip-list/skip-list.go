@@ -3,13 +3,13 @@ package skiplist
 import (
 	"fmt"
 	"math/rand"
-	"nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
 	generic_types "nosql-engine/packages/utils/generic-types"
 	"time"
 )
 
 type SkipList struct {
-	maxHeight int
+	MaxHeight int
 	height    int
 	size      int
 	head      *SkipListNode
@@ -33,7 +33,7 @@ func New(maxHeight int) *SkipList {
 	}
 
 	return &SkipList{
-		maxHeight: maxHeight,
+		MaxHeight: maxHeight,
 		height:    1,
 		size:      0,
 		head:      head,
@@ -45,7 +45,7 @@ func (s *SkipList) roll() int {
 	// possible ret values from rand are 0 and 1
 	// we stop shen we get a 0
 	for ; rand.Int31n(2) == 1; level++ {
-		if level >= s.maxHeight {
+		if level >= s.MaxHeight {
 			if level > s.height {
 				s.height = level
 			}
@@ -75,7 +75,7 @@ func (s *SkipList) Find(key string) *SkipListNode {
 	return nil
 }
 
-func (s *SkipList) Add(key string, elem database.DatabaseElem) bool {
+func (s *SkipList) Add(key string, elem database_elem.DatabaseElem) bool {
 	// check if element is already there if it is update the timestamp and data
 	oldElem := s.Find(key)
 	if oldElem != nil {
@@ -87,8 +87,8 @@ func (s *SkipList) Add(key string, elem database.DatabaseElem) bool {
 
 	current := s.head
 	level := s.roll()
-	if level >= s.maxHeight {
-		level = s.maxHeight - 1
+	if level >= s.MaxHeight {
+		level = s.MaxHeight - 1
 	}
 
 	newNode := &SkipListNode{
@@ -96,7 +96,7 @@ func (s *SkipList) Add(key string, elem database.DatabaseElem) bool {
 		value:     elem.Value,
 		tombstone: elem.Tombstone,
 		timestamp: uint64(time.Now().Unix()),
-		next:      make([]*SkipListNode, s.maxHeight),
+		next:      make([]*SkipListNode, s.MaxHeight),
 	}
 
 	// start from the level of insertion and insert downwards
@@ -123,7 +123,7 @@ func (s *SkipList) Remove(key string) bool {
 		return false
 	}
 
-	newElem := &database.DatabaseElem{
+	newElem := &database_elem.DatabaseElem{
 		Value:     []byte(""),
 		Tombstone: 1,
 		Timestamp: uint64(time.Now().Unix()),
@@ -134,7 +134,7 @@ func (s *SkipList) Remove(key string) bool {
 }
 
 func (s *SkipList) PrintLevels() {
-	for i := s.maxHeight - 1; i >= 0; i-- {
+	for i := s.MaxHeight - 1; i >= 0; i-- {
 		fmt.Println("------------- LEVEL " + fmt.Sprint(i) + " -------------")
 		current := s.head
 		for current != nil {
@@ -145,8 +145,8 @@ func (s *SkipList) PrintLevels() {
 	}
 }
 
-func (s *SkipList) Flush() []generic_types.KeyVal[string, database.DatabaseElem] {
-	elems := make([]generic_types.KeyVal[string, database.DatabaseElem], s.size)
+func (s *SkipList) Flush() []generic_types.KeyVal[string, database_elem.DatabaseElem] {
+	elems := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], s.size)
 	current := s.head
 	current = current.next[0]
 
@@ -162,8 +162,8 @@ func (s *SkipList) Flush() []generic_types.KeyVal[string, database.DatabaseElem]
 	return elems
 }
 
-func NodeToElem(node SkipListNode) *database.DatabaseElem {
-	return &database.DatabaseElem{
+func NodeToElem(node SkipListNode) *database_elem.DatabaseElem {
+	return &database_elem.DatabaseElem{
 		Value:     node.value,
 		Tombstone: node.tombstone,
 		Timestamp: node.timestamp,

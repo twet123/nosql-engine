@@ -3,7 +3,8 @@ package memtable
 import (
 	"fmt"
 	"math/rand"
-	"nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
+	"os"
 	"testing"
 	"time"
 )
@@ -23,8 +24,8 @@ func TestMemTable(t *testing.T) {
 	elementsCnt := 100
 	capacity := 40
 
-	memtableTree := New(capacity, "btree")
-	memtableList := New(capacity, "skiplist")
+	memtableTree := New(capacity, "btree", 4, 2, 3)
+	memtableList := New(capacity, "skiplist", 32, 0, 3)
 
 	randomStr := make([]string, elementsCnt)
 	for i := 0; i < elementsCnt; i++ {
@@ -36,12 +37,12 @@ func TestMemTable(t *testing.T) {
 		}
 
 		randomStr[i] = randSeq(10)
-		memtableTree.Insert(randomStr[i], database.DatabaseElem{
+		memtableTree.Insert(randomStr[i], database_elem.DatabaseElem{
 			Value:     []byte(randomStr[i]),
 			Tombstone: 0,
 			Timestamp: uint64(time.Now().Unix()),
 		})
-		memtableList.Insert(randomStr[i], database.DatabaseElem{
+		memtableList.Insert(randomStr[i], database_elem.DatabaseElem{
 			Value:     []byte(randomStr[i]),
 			Tombstone: 0,
 			Timestamp: uint64(time.Now().Unix()),
@@ -98,4 +99,6 @@ func TestMemTable(t *testing.T) {
 	if memtableTree.capacity != 0 {
 		t.Fatalf("MemtableTree delete failed! " + fmt.Sprint(memtableTree.capacity))
 	}
+
+	os.RemoveAll("./data")
 }

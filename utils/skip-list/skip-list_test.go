@@ -2,7 +2,7 @@ package skiplist
 
 import (
 	"math/rand"
-	"nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
 	"testing"
 	"time"
 )
@@ -27,7 +27,7 @@ func TestSkipList(t *testing.T) {
 
 	for i := 0; i < elementsCnt; i++ {
 		randomStr[i] = randSeq(10)
-		newElem := &database.DatabaseElem{Value: []byte(randomStr[i]), Tombstone: 0, Timestamp: uint64(time.Now().Unix())}
+		newElem := &database_elem.DatabaseElem{Value: []byte(randomStr[i]), Tombstone: 0, Timestamp: uint64(time.Now().Unix())}
 		skipList.Add(randomStr[i], *newElem)
 	}
 

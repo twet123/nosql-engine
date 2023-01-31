@@ -1,20 +1,22 @@
 package memtable
 
 import (
-	"fmt"
 	btree "nosql-engine/packages/utils/b-tree"
-	"nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
+
 	generic_types "nosql-engine/packages/utils/generic-types"
 	skiplist "nosql-engine/packages/utils/skip-list"
+	"nosql-engine/packages/utils/sstable"
 	"time"
 )
 
 type MemTable struct {
-	structType  string
-	maxCapacity int
-	capacity    int
-	tree        *btree.BTree[string, database.DatabaseElem]
-	list        *skiplist.SkipList
+	structType   string
+	maxCapacity  int
+	capacity     int
+	tree         *btree.BTree[string, database_elem.DatabaseElem]
+	list         *skiplist.SkipList
+	summaryCount int
 }
 
 // type MemTableElem struct {
@@ -23,29 +25,32 @@ type MemTable struct {
 // 	timestamp uint64
 // }
 
-func New(capacity int, structType string) *MemTable {
+// max representing max levels for skiplist or max elements in node for btree, min repsresents min elements in node for btree
+func New(capacity int, structType string, max uint64, min uint64, summaryCount int) *MemTable {
 	if structType == "btree" {
 		return &MemTable{
-			structType:  structType,
-			maxCapacity: capacity,
-			capacity:    0,
-			tree:        btree.Init[string, database.DatabaseElem](2, 4),
-			list:        nil,
+			structType:   structType,
+			maxCapacity:  capacity,
+			capacity:     0,
+			tree:         btree.Init[string, database_elem.DatabaseElem](int(min), int(max)),
+			list:         nil,
+			summaryCount: summaryCount,
 		}
 	} else if structType == "skiplist" {
 		return &MemTable{
-			structType:  structType,
-			maxCapacity: capacity,
-			capacity:    0,
-			tree:        nil,
-			list:        skiplist.New(32),
+			structType:   structType,
+			maxCapacity:  capacity,
+			capacity:     0,
+			tree:         nil,
+			list:         skiplist.New(int(max)),
+			summaryCount: summaryCount,
 		}
 	} else {
 		panic("Invalid structType!")
 	}
 }
 
-func (mt *MemTable) insertSkipList(key string, elem database.DatabaseElem) {
+func (mt *MemTable) insertSkipList(key string, elem database_elem.DatabaseElem) {
 	res := mt.list.Add(key, elem)
 
 	if res {
@@ -53,7 +58,7 @@ func (mt *MemTable) insertSkipList(key string, elem database.DatabaseElem) {
 	}
 }
 
-func (mt *MemTable) insertBTree(key string, elem database.DatabaseElem) {
+func (mt *MemTable) insertBTree(key string, elem database_elem.DatabaseElem) {
 	res := mt.tree.Set(key, elem)
 
 	if res {
@@ -61,7 +66,7 @@ func (mt *MemTable) insertBTree(key string, elem database.DatabaseElem) {
 	}
 }
 
-func (mt *MemTable) Insert(key string, elem database.DatabaseElem) {
+func (mt *MemTable) Insert(key string, elem database_elem.DatabaseElem) {
 	if mt.structType == "btree" {
 		mt.insertBTree(key, elem)
 	}
@@ -80,7 +85,7 @@ func (mt *MemTable) deleteBTree(key string) {
 		elem.Value.Tombstone = 1
 		mt.tree.Set(elem.Key, elem.Value)
 	} else {
-		deletedElem := &database.DatabaseElem{Tombstone: 1, Value: []byte(""), Timestamp: uint64(time.Now().Unix())}
+		deletedElem := &database_elem.DatabaseElem{Tombstone: 1, Value: []byte(""), Timestamp: uint64(time.Now().Unix())}
 		mt.tree.Set(key, *deletedElem)
 		mt.capacity++
 	}
@@ -110,19 +115,19 @@ func (mt *MemTable) Delete(key string) {
 	}
 }
 
-func (mt *MemTable) findBTree(key string) (found bool, elem generic_types.KeyVal[string, database.DatabaseElem]) {
+func (mt *MemTable) findBTree(key string) (found bool, elem generic_types.KeyVal[string, database_elem.DatabaseElem]) {
 	found, keyval := mt.tree.Get(key)
 
 	return found, keyval
 }
 
-func (mt *MemTable) findSkipList(key string) (found bool, elem generic_types.KeyVal[string, database.DatabaseElem]) {
+func (mt *MemTable) findSkipList(key string) (found bool, elem generic_types.KeyVal[string, database_elem.DatabaseElem]) {
 	node := mt.list.Find(key)
 	elem.Key = key
 
 	if node == nil {
 		found = false
-		elem.Value = database.DatabaseElem{
+		elem.Value = database_elem.DatabaseElem{
 			Tombstone: 0,
 			Value:     []byte(""),
 			Timestamp: 0,
@@ -137,7 +142,7 @@ func (mt *MemTable) findSkipList(key string) (found bool, elem generic_types.Key
 
 // First element returned is a boolean telling if the element was found, the second is a KeyValue pair
 // containing element info. Check if the tombstone is 0 before returning in read path!
-func (mt *MemTable) Find(key string) (bool, generic_types.KeyVal[string, database.DatabaseElem]) {
+func (mt *MemTable) Find(key string) (bool, generic_types.KeyVal[string, database_elem.DatabaseElem]) {
 	if mt.structType == "btree" {
 		return mt.findBTree(key)
 	} else {
@@ -147,13 +152,20 @@ func (mt *MemTable) Find(key string) (bool, generic_types.KeyVal[string, databas
 
 func (mt *MemTable) Flush() {
 	if mt.structType == "btree" {
-		fmt.Println(mt.tree.SortedSlice())
-		mt.tree = btree.Init[string, database.DatabaseElem](2, 4)
+		prevMin := mt.tree.MinElementsCnt
+		prevMax := mt.tree.MaxElementsCnt
+		sstable.CreateSStable(mt.tree.SortedSlice(), mt.summaryCount, "data/usertables/")
+		mt.tree = btree.Init[string, database_elem.DatabaseElem](prevMin, prevMax)
 	}
 	if mt.structType == "skiplist" {
-		fmt.Println(mt.list.Flush())
-		mt.list = skiplist.New(32)
+		prevMax := mt.list.MaxHeight
+		sstable.CreateSStable(mt.list.Flush(), mt.summaryCount, "data/usertables/")
+		mt.list = skiplist.New(prevMax)
 	}
 
 	mt.capacity = 0
+}
+
+func (mt *MemTable) CheckFlushed() bool {
+	return mt.capacity == 0
 }

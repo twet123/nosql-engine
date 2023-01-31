@@ -1,8 +1,9 @@
 package sstable
 
 import (
-	db "nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
 	GTypes "nosql-engine/packages/utils/generic-types"
+	"os"
 
 	"strconv"
 	"testing"
@@ -11,24 +12,24 @@ import (
 
 func TestSStable(t *testing.T) {
 	count := 3
-	dbelems := make([]GTypes.KeyVal[string, db.DatabaseElem], 0)
+	dbelems := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
 	for i := 0; i < 10; i++ {
 		ts := time.Now().Unix()
 		key := "key" + strconv.Itoa(i)
-		val := db.DatabaseElem{Tombstone: 0, Value: []byte("nesto" + strconv.Itoa(i)), Timestamp: uint64(ts)}
-		dbelems = append(dbelems, GTypes.KeyVal[string, db.DatabaseElem]{Key: key, Value: val})
+		val := database_elem.DatabaseElem{Tombstone: 0, Value: []byte("nesto" + strconv.Itoa(i)), Timestamp: uint64(ts)}
+		dbelems = append(dbelems, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: val})
 	}
 
-	CreateSStable(dbelems, count, "files")
+	CreateSStable(dbelems, count, "../../data/testTables")
 }
 
 func TestFindKey(t *testing.T) {
-	prefix := "files/"
+	prefix := "../../data/testTables"
 	found, dbel := Find("key0", prefix)
 	if !found || dbel == nil {
 		t.Fatalf("find not working")
 	}
-	found, dbel = Find("key10", prefix)
+	found, _ = Find("key10", prefix)
 	if found {
 		t.Fatalf("find not working")
 	}
@@ -36,4 +37,6 @@ func TestFindKey(t *testing.T) {
 	if !found || dbel == nil {
 		t.Fatalf("find not working")
 	}
+
+	os.RemoveAll(prefix)
 }
