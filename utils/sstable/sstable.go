@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"io"
+	"io/fs"
+	"io/ioutil"
 	"log"
 	"math"
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
@@ -53,8 +55,8 @@ func new(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int) S
 	return SSTable{bf: *bf, data: array, index: index, summary: sum, TOC: TOC}
 }
 
-func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int, prefix string) {
-	defineOrder(prefix)
+func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int, prefix string, level int) {
+	defineOrder(prefix, level)
 
 	st := new(array, count)
 	for offset, element := range array {
@@ -63,11 +65,11 @@ func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], co
 		st.index = append(st.index, GTypes.KeyVal[string, uint64]{Key: key, Value: uint64(offset)})
 		st.bf.Add(string(key))
 	}
-	createFiles(st, prefix)
+	createFiles(st, prefix, level)
 }
 
-func createFiles(st SSTable, prefix string) {
-	name := "/usertable-L0-" + strconv.Itoa(order) + "-"
+func createFiles(st SSTable, prefix string, level int) {
+	name := "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(order) + "-"
 	st.bf.MakeFile(prefix, name+"Filter.db")
 
 	name = prefix + name
@@ -212,7 +214,7 @@ func CRC32(data []byte) uint32 {
 	return crc32.ChecksumIEEE(data)
 }
 
-func defineOrder(prefix string) {
+func defineOrder(prefix string, level int) {
 	files, err := os.ReadDir("./" + prefix)
 	if os.IsNotExist(err) {
 		os.MkdirAll(prefix, os.ModePerm)
@@ -224,6 +226,9 @@ func defineOrder(prefix string) {
 		var s string = file.Name()
 		numbers := make([]int, 0)
 		pos := 0
+		if !strings.Contains(s, "L"+strconv.Itoa(level)) {
+			continue
+		}
 		for i := 13; ; i++ {
 			if len(s) < 14 {
 				break
@@ -250,17 +255,47 @@ func defineOrder(prefix string) {
 	st++
 }
 
-func Find(key string, prefix string) (bool, *database_elem.DatabaseElem) {
+func readOrder(prefix string, levelNum uint64) []string {
 	filespath := prefix
-	files, err := os.ReadDir("./" + filespath)
+	files, err := ioutil.ReadDir("./" + filespath)
 	if err != nil {
 		log.Fatal(err)
 	}
+	arr := make([]string, 0)
+	for i := 0; i < int(levelNum); i++ {
+		tocs := findAllTOCPerLevel(i, files)
+		tocs = sortTOCPerLevel(tocs)
+		arr = append(arr, tocs...)
+	}
+	return arr
+}
+
+func findAllTOCPerLevel(level int, files []fs.FileInfo) []string {
+	tocfiles := make([]string, 0)
 	for _, file := range files {
 		name := file.Name()
 		if !strings.Contains(name, "TOC") {
 			continue
 		}
+		if !strings.Contains(name, "L"+strconv.Itoa(level)) {
+			continue
+		}
+		tocfiles = append(tocfiles, name)
+	}
+	return tocfiles
+}
+
+func sortTOCPerLevel(s []string) []string {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+	return s
+}
+
+func Find(key string, prefix string, levels uint64) (bool, *database_elem.DatabaseElem) {
+	filespath := prefix
+	arrToc := readOrder(prefix, levels)
+	for _, name := range arrToc {
 		fmap := readTOC(name, filespath)
 		bf := bloomfilter.NewFromFile(fmap["filter"])
 		found := bf.Find(key)

@@ -154,12 +154,12 @@ func (mt *MemTable) Flush() {
 	if mt.structType == "btree" {
 		prevMin := mt.tree.MinElementsCnt
 		prevMax := mt.tree.MaxElementsCnt
-		sstable.CreateSStable(mt.tree.SortedSlice(), mt.summaryCount, "data/usertables/")
+		sstable.CreateSStable(mt.tree.SortedSlice(), mt.summaryCount, "data/usertables/", 0)
 		mt.tree = btree.Init[string, database_elem.DatabaseElem](prevMin, prevMax)
 	}
 	if mt.structType == "skiplist" {
 		prevMax := mt.list.MaxHeight
-		sstable.CreateSStable(mt.list.Flush(), mt.summaryCount, "data/usertables/")
+		sstable.CreateSStable(mt.list.Flush(), mt.summaryCount, "data/usertables/", 0)
 		mt.list = skiplist.New(prevMax)
 	}
 
