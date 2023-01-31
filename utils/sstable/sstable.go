@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"encoding/binary"
 	"hash/crc32"
+	"io"
 	"log"
 	"math"
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
-	"nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
 	GTypes "nosql-engine/packages/utils/generic-types"
 	merkletree "nosql-engine/packages/utils/merkle-tree"
 	"os"
@@ -18,7 +19,7 @@ import (
 var order = 0
 
 type SSTable struct {
-	data    []GTypes.KeyVal[string, database.DatabaseElem]
+	data    []GTypes.KeyVal[string, database_elem.DatabaseElem]
 	index   []GTypes.KeyVal[string, uint64]
 	summary Summary
 	bf      bloomfilter.BloomFilter
@@ -31,7 +32,7 @@ type Summary struct {
 	indexes []GTypes.KeyVal[string, uint64]
 }
 
-func new(array []GTypes.KeyVal[string, database.DatabaseElem], count int) SSTable {
+func new(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int) SSTable {
 	bf := bloomfilter.New(len(array), 0.01)
 	index := make([]GTypes.KeyVal[string, uint64], 0)
 
@@ -52,7 +53,7 @@ func new(array []GTypes.KeyVal[string, database.DatabaseElem], count int) SSTabl
 	return SSTable{bf: *bf, data: array, index: index, summary: sum, TOC: TOC}
 }
 
-func CreateSStable(array []GTypes.KeyVal[string, database.DatabaseElem], count int, prefix string) {
+func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int, prefix string) {
 	defineOrder(prefix)
 
 	st := new(array, count)
@@ -213,8 +214,10 @@ func CRC32(data []byte) uint32 {
 
 func defineOrder(prefix string) {
 	files, err := os.ReadDir("./" + prefix)
-	if err != nil {
-		log.Fatal(err)
+	if os.IsNotExist(err) {
+		os.MkdirAll(prefix, os.ModePerm)
+	} else if err != nil {
+		panic(err)
 	}
 
 	for _, file := range files {
@@ -247,9 +250,9 @@ func defineOrder(prefix string) {
 	st++
 }
 
-func Find(key string, prefix string) (bool, *database.DatabaseElem) {
+func Find(key string, prefix string) (bool, *database_elem.DatabaseElem) {
 	filespath := prefix
-	files, err := ioutil.ReadDir("./" + filespath)
+	files, err := os.ReadDir("./" + filespath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -331,9 +334,9 @@ func checkIndex(key string, filename string, start uint64, stop uint64) (bool, u
 	if err != nil {
 		log.Fatal(err)
 	}
-	file.Seek(int64(start), os.SEEK_SET)
+	file.Seek(int64(start), io.SeekStart)
 	for {
-		pos, _ := file.Seek(0, os.SEEK_CUR)
+		pos, _ := file.Seek(0, io.SeekCurrent)
 		if stop < uint64(pos) {
 			return false, 0
 		}
@@ -348,14 +351,17 @@ func checkIndex(key string, filename string, start uint64, stop uint64) (bool, u
 	}
 }
 
-func readData(filename string, offset uint64) (bool, database.DatabaseElem) {
+func readData(filename string, offset uint64) (bool, database_elem.DatabaseElem) {
 	readFile, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
 	defer readFile.Close()
 
 	if err != nil {
 		log.Fatal(err)
 	}
-	readFile.Seek(int64(offset), os.SEEK_SET)
+	readFile.Seek(int64(offset), io.SeekStart)
 	crc := readUint32(*readFile)
 	timestamp := readUint64(*readFile)
 	tombstone := readByte(*readFile)
@@ -366,7 +372,7 @@ func readData(filename string, offset uint64) (bool, database.DatabaseElem) {
 	if !equals {
 		log.Fatal("crc not match values")
 	}
-	return tombstone == byte(1), database.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
+	return tombstone == byte(1), database_elem.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
 }
 
 func readKey(f os.File) string {
