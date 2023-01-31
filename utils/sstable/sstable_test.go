@@ -25,15 +25,15 @@ func TestSStable(t *testing.T) {
 
 func TestFindKey(t *testing.T) {
 	prefix := "../../data/testTables"
-	found, dbel := Find("key0", prefix)
+	found, dbel := Find("key0", prefix, 1)
 	if !found || dbel == nil {
 		t.Fatalf("find not working")
 	}
-	found, _ = Find("key10", prefix)
+	found, _ = Find("key10", prefix, 1)
 	if found {
 		t.Fatalf("find not working")
 	}
-	found, dbel = Find("key7", prefix)
+	found, dbel = Find("key7", prefix, 1)
 	if !found || dbel == nil {
 		t.Fatalf("find not working")
 	}
