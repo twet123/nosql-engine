@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"hash/crc32"
+	"io"
 	"io/fs"
 	"log"
 	"math"
@@ -148,7 +149,7 @@ func createIndexFile(name string, st SSTable, mode string) ([]uint64, uint64) {
 	if mode == "many" {
 		file, err = os.Create(name + "Index.db")
 	} else {
-		file, err = os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
+		file, err = os.OpenFile(name+"Data.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModeAppend)
 		start, _ = file.Seek(0, os.SEEK_END)
 	}
 	if err != nil {
@@ -183,7 +184,7 @@ func createSummaryFile(name string, st SSTable, mode string) uint64 {
 	if mode == "many" {
 		file, err = os.Create(name + "Summary.db")
 	} else {
-		file, err = os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
+		file, err = os.OpenFile(name+"Data.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModeAppend)
 		start, _ = file.Seek(0, os.SEEK_END)
 	}
 	if err != nil {
@@ -239,7 +240,7 @@ func createTOCFile(name string, mode string) {
 }
 
 func appendFileOffsets(name string, indexOffset, summOffset, bfOffset uint64) {
-	file, err := os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
+	file, err := os.OpenFile(name+"Data.db", os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModeAppend)
 	if err != nil {
 		panic(err)
 	}
@@ -356,6 +357,7 @@ func sortTOCPerLevel(s []string) []string {
 		}
 		s[i], s[j] = s[j], s[i]
 	}
+	s = append(s, tmp...)
 	return s
 }
 
@@ -418,7 +420,7 @@ func checkSummary(key string, filename string, fileOffset uint64) (bool, uint64,
 		log.Fatal(err)
 	}
 	defer file.Close()
-	file.Seek(int64(fileOffset), os.SEEK_SET)
+	file.Seek(int64(fileOffset), io.SeekStart)
 	start := readKey(*file)
 	stop := readKey(*file)
 	if key < start || key > stop {
@@ -445,9 +447,9 @@ func checkIndex(key string, filename string, start uint64, stop uint64) (bool, u
 		log.Fatal(err)
 	}
 	defer file.Close()
-	file.Seek(int64(start), os.SEEK_SET)
+	file.Seek(int64(start), io.SeekStart)
 	for {
-		pos, _ := file.Seek(0, os.SEEK_CUR)
+		pos, _ := file.Seek(0, io.SeekCurrent)
 		if stop < uint64(pos) {
 			return false, 0
 		}
@@ -472,7 +474,7 @@ func readData(filename string, offset uint64) (bool, database_elem.DatabaseElem)
 	if err != nil {
 		log.Fatal(err)
 	}
-	readFile.Seek(int64(offset), os.SEEK_SET)
+	readFile.Seek(int64(offset), io.SeekStart)
 	crc := readUint32(*readFile)
 	timestamp := readUint64(*readFile)
 	tombstone := readByte(*readFile)

@@ -60,7 +60,7 @@ func (bf *BloomFilter) MakeFile(path string, filename string, mode string) uint6
 	if mode == "many" {
 		file, err = os.Create(path + filename)
 	} else {
-		file, err = os.OpenFile(path+filename, os.O_APPEND, 0600)
+		file, err = os.OpenFile(path+filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		start, _ = file.Seek(0, os.SEEK_END)
 	}
 	if err != nil {
