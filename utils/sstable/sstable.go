@@ -244,7 +244,7 @@ func defineOrder(prefix string, level int) {
 		number := 0
 		for _, a := range numbers {
 			number += a * pos
-			pos--
+			pos /= 10
 		}
 		if order < number {
 			order = number
@@ -286,7 +286,14 @@ func findAllTOCPerLevel(level int, files []fs.FileInfo) []string {
 }
 
 func sortTOCPerLevel(s []string) []string {
+	tmp := make([]string, 0)
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		if i > 0 {
+			if s[i][13] == s[i-1][13] {
+				tmp = append(tmp, s[i])
+				continue
+			}
+		}
 		s[i], s[j] = s[j], s[i]
 	}
 	return s
@@ -312,7 +319,7 @@ func Find(key string, prefix string, levels uint64) (bool, *database_elem.Databa
 		}
 		deleted, dbel := readData(fmap["data"], start)
 		if deleted {
-			continue
+			return false, nil
 		}
 		return true, &dbel
 	}
