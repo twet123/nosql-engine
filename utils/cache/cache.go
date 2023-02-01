@@ -3,34 +3,29 @@ package cache
 import (
 	"container/list"
 	"fmt"
+	database_elem "nosql-engine/packages/utils/database-elem"
 	generic_types "nosql-engine/packages/utils/generic-types"
 )
 
-type Cache[K comparable, V any] struct {
+type Cache struct {
 	lista   list.List
 	size    int
-	hashMap map[K]*list.Element
+	hashMap map[string]*list.Element
 	last    *list.Element
 }
 
-func (cache *Cache[K, V]) Contains(key K) bool {
+func (cache *Cache) Contains(key string) bool {
 	_, ok := cache.hashMap[key]
 	return ok
 }
 
 // if an element that is being deleted is found in cache, we have to delete it from cache
-func (cache *Cache[K, V]) Delete(key K) bool {
+func (cache *Cache) Delete(key string) bool {
 	if cache.Contains(key) {
-		if cache.last == cache.hashMap[key] {
-			tmpLast := cache.last.Prev()
-
-			cache.lista.Remove(cache.hashMap[key])
-			delete(cache.hashMap, key)
-			cache.last = tmpLast
-		} else {
-			cache.lista.Remove(cache.hashMap[key])
-			delete(cache.hashMap, key)
-		}
+		listElem := cache.hashMap[key]
+		prevValue := listElem.Value.(generic_types.KeyVal[string, database_elem.DatabaseElem])
+		prevValue.Value.Tombstone = 1
+		listElem.Value = prevValue
 
 		return true
 	}
@@ -38,10 +33,10 @@ func (cache *Cache[K, V]) Delete(key K) bool {
 	return false
 }
 
-func (cache *Cache[K, V]) Refer(key K, value V) V {
+func (cache *Cache) Refer(key string, value database_elem.DatabaseElem) database_elem.DatabaseElem {
 	if !cache.Contains(key) {
 		if cache.size == cache.lista.Len() {
-			data := cache.last.Value.(generic_types.KeyVal[K, V])
+			data := cache.last.Value.(generic_types.KeyVal[string, database_elem.DatabaseElem])
 			delete(cache.hashMap, data.Key)
 
 			tmp_last := cache.last.Prev()
@@ -53,25 +48,25 @@ func (cache *Cache[K, V]) Refer(key K, value V) V {
 		if cache.hashMap[key] == cache.last {
 			cache.last = cache.last.Prev()
 		}
-		value = cache.hashMap[key].Value.(generic_types.KeyVal[K, V]).Value
+		value = cache.hashMap[key].Value.(generic_types.KeyVal[string, database_elem.DatabaseElem]).Value
 		cache.lista.Remove(cache.hashMap[key])
 	}
-	cache.lista.PushFront(generic_types.KeyVal[K, V]{Key: key, Value: value})
+	cache.lista.PushFront(generic_types.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: value})
 	if cache.lista.Len() == 1 {
 		cache.last = cache.lista.Front()
 	}
 
 	cache.hashMap[key] = cache.lista.Front()
 
-	return cache.lista.Front().Value.(generic_types.KeyVal[K, V]).Value
+	return cache.lista.Front().Value.(generic_types.KeyVal[string, database_elem.DatabaseElem]).Value
 }
 
-func (cache *Cache[K, V]) Display() {
+func (cache *Cache) Display() {
 	for i := cache.lista.Front(); i != nil; i = i.Next() {
 		fmt.Println(i.Value)
 	}
 }
 
-func New[K comparable, V any](size int) Cache[K, V] {
-	return Cache[K, V]{lista: *list.New(), size: size, hashMap: make(map[K]*list.Element), last: nil}
+func New(size int) Cache {
+	return Cache{lista: *list.New(), size: size, hashMap: make(map[string]*list.Element), last: nil}
 }

@@ -14,7 +14,7 @@ type Database struct {
 	config   config.Config
 	memtable memtable.MemTable
 	wal      wal.WAL
-	cache    cache.Cache[string, database_elem.DatabaseElem]
+	cache    cache.Cache
 }
 
 func New() *Database {
@@ -25,14 +25,14 @@ func New() *Database {
 			config:   *config,
 			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.BTreeMax, config.BTreeMin, int(config.SummaryCount)),
 			wal:      *wal.New("data/wal/", uint32(config.WalSegmentSize), 0),
-			cache:    cache.New[string, database_elem.DatabaseElem](int(config.CacheSize)),
+			cache:    cache.New(int(config.CacheSize)),
 		}
 	} else {
 		return &Database{
 			config:   *config,
 			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.SkipListLevels, 0, int(config.SummaryCount)),
 			wal:      *wal.New("data/wal/", uint32(config.WalSegmentSize), 0),
-			cache:    cache.New[string, database_elem.DatabaseElem](int(config.CacheSize)),
+			cache:    cache.New(int(config.CacheSize)),
 		}
 	}
 }
