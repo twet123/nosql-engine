@@ -4,10 +4,13 @@ import (
 	"bufio"
 	"encoding/binary"
 	"hash/crc32"
+	"io"
+	"io/fs"
+	"io/ioutil"
 	"log"
 	"math"
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
-	"nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
 	GTypes "nosql-engine/packages/utils/generic-types"
 	merkletree "nosql-engine/packages/utils/merkle-tree"
 	"os"
@@ -18,7 +21,7 @@ import (
 var order = 0
 
 type SSTable struct {
-	data    []GTypes.KeyVal[string, database.DatabaseElem]
+	data    []GTypes.KeyVal[string, database_elem.DatabaseElem]
 	index   []GTypes.KeyVal[string, uint64]
 	summary Summary
 	bf      bloomfilter.BloomFilter
@@ -31,7 +34,7 @@ type Summary struct {
 	indexes []GTypes.KeyVal[string, uint64]
 }
 
-func new(array []GTypes.KeyVal[string, database.DatabaseElem], count int) SSTable {
+func new(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int) SSTable {
 	bf := bloomfilter.New(len(array), 0.01)
 	index := make([]GTypes.KeyVal[string, uint64], 0)
 
@@ -52,8 +55,8 @@ func new(array []GTypes.KeyVal[string, database.DatabaseElem], count int) SSTabl
 	return SSTable{bf: *bf, data: array, index: index, summary: sum, TOC: TOC}
 }
 
-func CreateSStable(array []GTypes.KeyVal[string, database.DatabaseElem], count int, prefix string) {
-	defineOrder(prefix)
+func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int, prefix string, level int) {
+	defineOrder(prefix, level)
 
 	st := new(array, count)
 	for offset, element := range array {
@@ -62,11 +65,11 @@ func CreateSStable(array []GTypes.KeyVal[string, database.DatabaseElem], count i
 		st.index = append(st.index, GTypes.KeyVal[string, uint64]{Key: key, Value: uint64(offset)})
 		st.bf.Add(string(key))
 	}
-	createFiles(st, prefix)
+	createFiles(st, prefix, level)
 }
 
-func createFiles(st SSTable, prefix string) {
-	name := "/usertable-L0-" + strconv.Itoa(order) + "-"
+func createFiles(st SSTable, prefix string, level int) {
+	name := "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(order) + "-"
 	st.bf.MakeFile(prefix, name+"Filter.db")
 
 	name = prefix + name
@@ -211,16 +214,21 @@ func CRC32(data []byte) uint32 {
 	return crc32.ChecksumIEEE(data)
 }
 
-func defineOrder(prefix string) {
+func defineOrder(prefix string, level int) {
 	files, err := os.ReadDir("./" + prefix)
-	if err != nil {
-		log.Fatal(err)
+	if os.IsNotExist(err) {
+		os.MkdirAll(prefix, os.ModePerm)
+	} else if err != nil {
+		panic(err)
 	}
 
 	for _, file := range files {
 		var s string = file.Name()
 		numbers := make([]int, 0)
 		pos := 0
+		if !strings.Contains(s, "L"+strconv.Itoa(level)) {
+			continue
+		}
 		for i := 13; ; i++ {
 			if len(s) < 14 {
 				break
@@ -247,17 +255,47 @@ func defineOrder(prefix string) {
 	st++
 }
 
-func Find(key string, prefix string) (bool, *database.DatabaseElem) {
+func readOrder(prefix string, levelNum uint64) []string {
 	filespath := prefix
 	files, err := ioutil.ReadDir("./" + filespath)
 	if err != nil {
 		log.Fatal(err)
 	}
+	arr := make([]string, 0)
+	for i := 0; i < int(levelNum); i++ {
+		tocs := findAllTOCPerLevel(i, files)
+		tocs = sortTOCPerLevel(tocs)
+		arr = append(arr, tocs...)
+	}
+	return arr
+}
+
+func findAllTOCPerLevel(level int, files []fs.FileInfo) []string {
+	tocfiles := make([]string, 0)
 	for _, file := range files {
 		name := file.Name()
 		if !strings.Contains(name, "TOC") {
 			continue
 		}
+		if !strings.Contains(name, "L"+strconv.Itoa(level)) {
+			continue
+		}
+		tocfiles = append(tocfiles, name)
+	}
+	return tocfiles
+}
+
+func sortTOCPerLevel(s []string) []string {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+	return s
+}
+
+func Find(key string, prefix string, levels uint64) (bool, *database_elem.DatabaseElem) {
+	filespath := prefix
+	arrToc := readOrder(prefix, levels)
+	for _, name := range arrToc {
 		fmap := readTOC(name, filespath)
 		bf := bloomfilter.NewFromFile(fmap["filter"])
 		found := bf.Find(key)
@@ -331,9 +369,9 @@ func checkIndex(key string, filename string, start uint64, stop uint64) (bool, u
 	if err != nil {
 		log.Fatal(err)
 	}
-	file.Seek(int64(start), os.SEEK_SET)
+	file.Seek(int64(start), io.SeekStart)
 	for {
-		pos, _ := file.Seek(0, os.SEEK_CUR)
+		pos, _ := file.Seek(0, io.SeekCurrent)
 		if stop < uint64(pos) {
 			return false, 0
 		}
@@ -348,14 +386,17 @@ func checkIndex(key string, filename string, start uint64, stop uint64) (bool, u
 	}
 }
 
-func readData(filename string, offset uint64) (bool, database.DatabaseElem) {
+func readData(filename string, offset uint64) (bool, database_elem.DatabaseElem) {
 	readFile, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
 	defer readFile.Close()
 
 	if err != nil {
 		log.Fatal(err)
 	}
-	readFile.Seek(int64(offset), os.SEEK_SET)
+	readFile.Seek(int64(offset), io.SeekStart)
 	crc := readUint32(*readFile)
 	timestamp := readUint64(*readFile)
 	tombstone := readByte(*readFile)
@@ -366,7 +407,7 @@ func readData(filename string, offset uint64) (bool, database.DatabaseElem) {
 	if !equals {
 		log.Fatal("crc not match values")
 	}
-	return tombstone == byte(1), database.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
+	return tombstone == byte(1), database_elem.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
 }
 
 func readKey(f os.File) string {
