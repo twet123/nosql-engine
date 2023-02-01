@@ -3,6 +3,7 @@ package database
 import (
 	"math/rand"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -31,16 +32,29 @@ func TestDatabase(t *testing.T) {
 		}
 	}
 
-	_, err := os.ReadDir("./data/usertables")
+	_, err := os.ReadDir("./data/wal")
 
 	if os.IsNotExist(err) {
 		t.Fatalf("Database PUT failed!")
 	}
 
-	_, err = os.ReadDir("./data/wal")
+	for i := 0; i < elementsCnt; i++ {
+		if !reflect.DeepEqual([]byte(randomStr[i]), db.Get(randomStr[i])) {
+			t.Fatalf("Database GET failed for key " + randomStr[i])
+		}
+	}
 
-	if os.IsNotExist(err) {
-		t.Fatalf("Database PUT failed!")
+	for i := 0; i < elementsCnt; i++ {
+		if db.Get(randSeq(11)) != nil {
+			t.Fatalf("Database GET failed for non-existent key " + randomStr[i])
+		}
+	}
+
+	for i := 0; i < elementsCnt; i++ {
+		db.Delete(randomStr[i])
+		if db.Get(randomStr[i]) != nil {
+			t.Fatalf("Database DELETE failed for key " + randomStr[i])
+		}
 	}
 
 	os.RemoveAll("./data")

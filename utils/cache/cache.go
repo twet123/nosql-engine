@@ -18,6 +18,26 @@ func (cache *Cache[K, V]) Contains(key K) bool {
 	return ok
 }
 
+// if an element that is being deleted is found in cache, we have to delete it from cache
+func (cache *Cache[K, V]) Delete(key K) bool {
+	if cache.Contains(key) {
+		if cache.last == cache.hashMap[key] {
+			tmpLast := cache.last.Prev()
+
+			cache.lista.Remove(cache.hashMap[key])
+			delete(cache.hashMap, key)
+			cache.last = tmpLast
+		} else {
+			cache.lista.Remove(cache.hashMap[key])
+			delete(cache.hashMap, key)
+		}
+
+		return true
+	}
+
+	return false
+}
+
 func (cache *Cache[K, V]) Refer(key K, value V) V {
 	if !cache.Contains(key) {
 		if cache.size == cache.lista.Len() {
