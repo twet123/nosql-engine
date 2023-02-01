@@ -57,7 +57,7 @@ func (bf *BloomFilter) MakeFile(path string, filename string, mode string) uint6
 	}
 	var file *os.File
 	var start int64
-	if mode == "one" {
+	if mode == "many" {
 		file, err = os.Create(path + filename)
 	} else {
 		file, err = os.OpenFile(path+filename, os.O_APPEND, 0600)

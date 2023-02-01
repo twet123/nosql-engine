@@ -4,9 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"hash/crc32"
-	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"math"
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
@@ -71,7 +69,7 @@ func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], co
 func createFiles(st SSTable, prefix string, level int, mode string) {
 	name := "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(order) + "-"
 
-	if mode == "one" {
+	if mode == "many" {
 		st.bf.MakeFile(prefix, name+"Filter.db", mode)
 	}
 
@@ -91,7 +89,7 @@ func createFiles(st SSTable, prefix string, level int, mode string) {
 	}
 	summOffset := createSummaryFile(name, st, mode)
 	var bfOffset uint64
-	if mode == "many" {
+	if mode == "one" {
 		bfOffset = st.bf.MakeFile(prefix, nameWithoutPrefix+"Data.db", mode)
 		appendFileOffsets(name, indexOffset, summOffset, bfOffset)
 	}
@@ -147,7 +145,7 @@ func createIndexFile(name string, st SSTable, mode string) ([]uint64, uint64) {
 	var file *os.File
 	var err error
 	var start int64 = 0
-	if mode == "one" {
+	if mode == "many" {
 		file, err = os.Create(name + "Index.db")
 	} else {
 		file, err = os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
@@ -182,7 +180,7 @@ func createSummaryFile(name string, st SSTable, mode string) uint64 {
 	var file *os.File
 	var err error
 	var start int64 = 0
-	if mode == "one" {
+	if mode == "many" {
 		file, err = os.Create(name + "Summary.db")
 	} else {
 		file, err = os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
@@ -230,7 +228,7 @@ func createTOCFile(name string, mode string) {
 		panic(err)
 	}
 	file.WriteString(name + "Data.db\n")
-	if mode == "one" {
+	if mode == "many" {
 		file.WriteString(name + "Index.db\n")
 		file.WriteString(name + "Summary.db\n")
 		file.WriteString(name + "Filter.db\n")
@@ -266,6 +264,8 @@ func readFileOffsets(filename string) (uint64, uint64, uint64) { //index, summar
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer readFile.Close()
+
 	readFile.Seek(-24, os.SEEK_END)
 	return readUint64(*readFile), readUint64(*readFile), readUint64(*readFile)
 }
@@ -317,7 +317,7 @@ func defineOrder(prefix string, level int) {
 
 func readOrder(prefix string, levelNum uint64) []string {
 	filespath := prefix
-	files, err := ioutil.ReadDir("./" + filespath)
+	files, err := os.ReadDir("./" + filespath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -330,7 +330,7 @@ func readOrder(prefix string, levelNum uint64) []string {
 	return arr
 }
 
-func findAllTOCPerLevel(level int, files []fs.FileInfo) []string {
+func findAllTOCPerLevel(level int, files []fs.DirEntry) []string {
 	tocfiles := make([]string, 0)
 	for _, file := range files {
 		name := file.Name()
@@ -366,7 +366,7 @@ func Find(key string, prefix string, levels uint64, mode string) (bool, *databas
 	for _, name := range arrToc {
 		fmap := readTOC(name, filespath, mode)
 		summOffset, bfOffset := uint64(0), uint64(0)
-		if mode == "many" {
+		if mode == "one" {
 			_, summOffset, bfOffset = readFileOffsets(fmap["data"])
 		}
 
@@ -418,7 +418,7 @@ func checkSummary(key string, filename string, fileOffset uint64) (bool, uint64,
 		log.Fatal(err)
 	}
 	defer file.Close()
-	file.Seek(int64(fileOffset), io.SeekStart)
+	file.Seek(int64(fileOffset), os.SEEK_SET)
 	start := readKey(*file)
 	stop := readKey(*file)
 	if key < start || key > stop {
@@ -445,9 +445,9 @@ func checkIndex(key string, filename string, start uint64, stop uint64) (bool, u
 		log.Fatal(err)
 	}
 	defer file.Close()
-	file.Seek(int64(start), io.SeekStart)
+	file.Seek(int64(start), os.SEEK_SET)
 	for {
-		pos, _ := file.Seek(0, io.SeekCurrent)
+		pos, _ := file.Seek(0, os.SEEK_CUR)
 		if stop < uint64(pos) {
 			return false, 0
 		}
@@ -472,7 +472,7 @@ func readData(filename string, offset uint64) (bool, database_elem.DatabaseElem)
 	if err != nil {
 		log.Fatal(err)
 	}
-	readFile.Seek(int64(offset), io.SeekStart)
+	readFile.Seek(int64(offset), os.SEEK_SET)
 	crc := readUint32(*readFile)
 	timestamp := readUint64(*readFile)
 	tombstone := readByte(*readFile)
@@ -537,7 +537,7 @@ func readTOC(filename, prefix, mode string) map[string]string { //data, index, s
 	readFile.Close()
 
 	fmap := make(map[string]string)
-	if mode == "one" {
+	if mode == "many" {
 		fmap["data"] = fileLines[0]
 		fmap["index"] = fileLines[1]
 		fmap["summary"] = fileLines[2]

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var mode string = "many"
+var mode string = "one"
 
 func TestSStable(t *testing.T) {
 	count := 3
