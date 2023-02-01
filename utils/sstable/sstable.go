@@ -75,6 +75,7 @@ func createFiles(st SSTable, prefix string, level int, mode string) {
 		st.bf.MakeFile(prefix, name+"Filter.db", mode)
 	}
 
+	nameWithoutPrefix := name
 	name = prefix + name
 	arr := createDataFile(name, st)
 
@@ -91,7 +92,7 @@ func createFiles(st SSTable, prefix string, level int, mode string) {
 	summOffset := createSummaryFile(name, st, mode)
 	var bfOffset uint64
 	if mode == "many" {
-		bfOffset = st.bf.MakeFile(prefix, name+"Data.db", mode)
+		bfOffset = st.bf.MakeFile(prefix, nameWithoutPrefix+"Data.db", mode)
 		appendFileOffsets(name, indexOffset, summOffset, bfOffset)
 	}
 	createTOCFile(name, mode)
@@ -413,11 +414,11 @@ func checkCRC(crc uint32, timestamp uint64, tombstone byte, key string, value []
 
 func checkSummary(key string, filename string, fileOffset uint64) (bool, uint64, uint64) { //returns range of index bytes where key may be
 	file, err := os.Open(filename)
-	defer file.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-	file.Seek(int64(fileOffset), os.SEEK_SET)
+	defer file.Close()
+	file.Seek(int64(fileOffset), io.SeekStart)
 	start := readKey(*file)
 	stop := readKey(*file)
 	if key < start || key > stop {
@@ -440,10 +441,10 @@ func checkSummary(key string, filename string, fileOffset uint64) (bool, uint64,
 
 func checkIndex(key string, filename string, start uint64, stop uint64) (bool, uint64) {
 	file, err := os.Open(filename)
-	defer file.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer file.Close()
 	file.Seek(int64(start), io.SeekStart)
 	for {
 		pos, _ := file.Seek(0, io.SeekCurrent)

@@ -2,6 +2,7 @@ package bloomfilter
 
 import (
 	"encoding/binary"
+	"io"
 	"nosql-engine/packages/utils/hash"
 	"os"
 )
@@ -59,7 +60,7 @@ func (bf *BloomFilter) MakeFile(path string, filename string, mode string) uint6
 	if mode == "one" {
 		file, err = os.Create(path + filename)
 	} else {
-		file, err = os.OpenFile(filename, os.O_APPEND, 0600)
+		file, err = os.OpenFile(path+filename, os.O_APPEND, 0600)
 		start, _ = file.Seek(0, os.SEEK_END)
 	}
 	if err != nil {
@@ -88,7 +89,7 @@ func NewFromFile(name string, fileOffset uint64) *BloomFilter {
 	if err != nil {
 		panic(err)
 	}
-	file.Seek(int64(fileOffset), os.SEEK_SET)
+	file.Seek(int64(fileOffset), io.SeekStart)
 	buff := make([]byte, 4)
 	binary.Read(file, binary.LittleEndian, buff)
 	m := binary.LittleEndian.Uint32(buff)
