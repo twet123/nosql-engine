@@ -576,7 +576,6 @@ func ReadRecord(readFile *os.File, offset uint64) (string, *database_elem.Databa
 	if current == int64(offset) {
 		return "", nil
 	}
-	readFile.Seek(int64(offset), io.SeekStart)
 	crc := readUint32(*readFile)
 	timestamp := readUint64(*readFile)
 	tombstone := readByte(*readFile)
