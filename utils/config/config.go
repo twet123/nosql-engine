@@ -14,6 +14,8 @@ type Config struct {
 	BTreeMax          uint64 `yaml:"btree_max"`
 	SkipListLevels    uint64 `yaml:"skiplist_levels"`
 	SummaryCount      uint64 `yaml:"summary_count"`
+	CacheSize         uint64 `yaml:"cache_size"`
+	LsmLevels         uint64 `yaml:"lsm_levels"`
 }
 
 func GetConfig() *Config {
@@ -28,8 +30,10 @@ func GetConfig() *Config {
 		config.BTreeMax = 4
 		config.SkipListLevels = 32
 		config.SummaryCount = 3
+		config.CacheSize = 10
+		config.LsmLevels = 4
+	} else {
+		yaml.Unmarshal(configData, &config)
 	}
-
-	yaml.Unmarshal(configData, &config)
 	return &config
 }

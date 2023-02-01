@@ -5,4 +5,6 @@ btree_min: 2
 btree_max: 4
 skiplist_levels: 32
 summary_count: 3
+cache_size: 10
+lsm_levels: 4
 # add more things as they come up to your mind
