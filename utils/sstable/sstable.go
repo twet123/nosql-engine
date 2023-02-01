@@ -55,7 +55,7 @@ func new(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int) S
 	return SSTable{bf: *bf, data: array, index: index, summary: sum, TOC: TOC}
 }
 
-func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int, prefix string, level int) {
+func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int, prefix string, level int, mode string) {
 	defineOrder(prefix, level)
 
 	st := new(array, count)
@@ -65,12 +65,15 @@ func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], co
 		st.index = append(st.index, GTypes.KeyVal[string, uint64]{Key: key, Value: uint64(offset)})
 		st.bf.Add(string(key))
 	}
-	createFiles(st, prefix, level)
+	createFiles(st, prefix, level, mode)
 }
 
-func createFiles(st SSTable, prefix string, level int) {
+func createFiles(st SSTable, prefix string, level int, mode string) {
 	name := "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(order) + "-"
-	st.bf.MakeFile(prefix, name+"Filter.db")
+
+	if mode == "one" {
+		st.bf.MakeFile(prefix, name+"Filter.db", mode)
+	}
 
 	name = prefix + name
 	arr := createDataFile(name, st)
@@ -79,13 +82,19 @@ func createFiles(st SSTable, prefix string, level int) {
 		st.index[i].Value = arr[i]
 	}
 
-	arr = createIndexFile(name, st)
+	arr, indexOffset := createIndexFile(name, st, mode)
+
 	for i := range st.summary.indexes {
 		in := st.summary.indexes[i].Value
-		st.summary.indexes[i].Value = arr[in]
+		st.summary.indexes[i].Value = arr[in] + indexOffset
 	}
-	createSummaryFile(name, st)
-	createTOCFile(name)
+	summOffset := createSummaryFile(name, st, mode)
+	var bfOffset uint64
+	if mode == "many" {
+		bfOffset = st.bf.MakeFile(prefix, name+"Data.db", mode)
+		appendFileOffsets(name, indexOffset, summOffset, bfOffset)
+	}
+	createTOCFile(name, mode)
 }
 
 func createDataFile(name string, st SSTable) []uint64 {
@@ -133,8 +142,16 @@ func createDataFile(name string, st SSTable) []uint64 {
 	return offsetstart
 }
 
-func createIndexFile(name string, st SSTable) []uint64 {
-	file, err := os.Create(name + "Index.db")
+func createIndexFile(name string, st SSTable, mode string) ([]uint64, uint64) {
+	var file *os.File
+	var err error
+	var start int64 = 0
+	if mode == "one" {
+		file, err = os.Create(name + "Index.db")
+	} else {
+		file, err = os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
+		start, _ = file.Seek(0, os.SEEK_END)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -143,6 +160,7 @@ func createIndexFile(name string, st SSTable) []uint64 {
 
 	sumoffsets := make([]uint64, 0)
 	for _, element := range st.index {
+
 		sumoffsets = append(sumoffsets, uint64(len(byteslice)))
 
 		binary.LittleEndian.PutUint64(tmpbs, uint64(len([]byte(element.Key))))
@@ -156,11 +174,19 @@ func createIndexFile(name string, st SSTable) []uint64 {
 	}
 	file.Write(byteslice)
 	file.Close()
-	return sumoffsets
+	return sumoffsets, uint64(start)
 }
 
-func createSummaryFile(name string, st SSTable) {
-	file, err := os.Create(name + "Summary.db")
+func createSummaryFile(name string, st SSTable, mode string) uint64 {
+	var file *os.File
+	var err error
+	var start int64 = 0
+	if mode == "one" {
+		file, err = os.Create(name + "Summary.db")
+	} else {
+		file, err = os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
+		start, _ = file.Seek(0, os.SEEK_END)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -184,6 +210,7 @@ func createSummaryFile(name string, st SSTable) {
 	}
 	file.Write(byteslice)
 	file.Close()
+	return uint64(start)
 }
 
 func createMerkleFile(name string, bytes [][]byte) {
@@ -196,18 +223,50 @@ func createMerkleFile(name string, bytes [][]byte) {
 	file.Close()
 }
 
-func createTOCFile(name string) {
+func createTOCFile(name string, mode string) {
 	file, err := os.Create(name + "TOC.txt")
 	if err != nil {
 		panic(err)
 	}
 	file.WriteString(name + "Data.db\n")
-	file.WriteString(name + "Index.db\n")
-	file.WriteString(name + "Summary.db\n")
-	file.WriteString(name + "Filter.db\n")
+	if mode == "one" {
+		file.WriteString(name + "Index.db\n")
+		file.WriteString(name + "Summary.db\n")
+		file.WriteString(name + "Filter.db\n")
+	}
 	file.WriteString(name + "Metadata.db\n")
 
 	file.Close()
+}
+
+func appendFileOffsets(name string, indexOffset, summOffset, bfOffset uint64) {
+	file, err := os.OpenFile(name+"Data.db", os.O_APPEND, 0600)
+	if err != nil {
+		panic(err)
+	}
+	byteslice := make([]byte, 0)
+	tmpbs := make([]byte, 8)
+
+	binary.LittleEndian.PutUint64(tmpbs, uint64(indexOffset))
+	byteslice = append(byteslice, tmpbs...)
+
+	binary.LittleEndian.PutUint64(tmpbs, uint64(summOffset))
+	byteslice = append(byteslice, tmpbs...)
+
+	binary.LittleEndian.PutUint64(tmpbs, uint64(bfOffset))
+	byteslice = append(byteslice, tmpbs...)
+
+	file.Write(byteslice)
+	file.Close()
+}
+
+func readFileOffsets(filename string) (uint64, uint64, uint64) { //index, summary, bloomfilter
+	readFile, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	readFile.Seek(-24, os.SEEK_END)
+	return readUint64(*readFile), readUint64(*readFile), readUint64(*readFile)
 }
 
 func CRC32(data []byte) uint32 {
@@ -299,17 +358,23 @@ func sortTOCPerLevel(s []string) []string {
 	return s
 }
 
-func Find(key string, prefix string, levels uint64) (bool, *database_elem.DatabaseElem) {
+func Find(key string, prefix string, levels uint64, mode string) (bool, *database_elem.DatabaseElem) {
 	filespath := prefix
 	arrToc := readOrder(prefix, levels)
+
 	for _, name := range arrToc {
-		fmap := readTOC(name, filespath)
-		bf := bloomfilter.NewFromFile(fmap["filter"])
+		fmap := readTOC(name, filespath, mode)
+		summOffset, bfOffset := uint64(0), uint64(0)
+		if mode == "many" {
+			_, summOffset, bfOffset = readFileOffsets(fmap["data"])
+		}
+
+		bf := bloomfilter.NewFromFile(fmap["filter"], bfOffset)
 		found := bf.Find(key)
 		if !found {
 			continue
 		}
-		found, start, stop := checkSummary(key, fmap["summary"])
+		found, start, stop := checkSummary(key, fmap["summary"], summOffset)
 		if !found {
 			continue
 		}
@@ -346,11 +411,13 @@ func checkCRC(crc uint32, timestamp uint64, tombstone byte, key string, value []
 	return (crc == CRC32(byteslice))
 }
 
-func checkSummary(key string, filename string) (bool, uint64, uint64) { //returns range of index bytes where key may be
+func checkSummary(key string, filename string, fileOffset uint64) (bool, uint64, uint64) { //returns range of index bytes where key may be
 	file, err := os.Open(filename)
+	defer file.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
+	file.Seek(int64(fileOffset), os.SEEK_SET)
 	start := readKey(*file)
 	stop := readKey(*file)
 	if key < start || key > stop {
@@ -373,6 +440,7 @@ func checkSummary(key string, filename string) (bool, uint64, uint64) { //return
 
 func checkIndex(key string, filename string, start uint64, stop uint64) (bool, uint64) {
 	file, err := os.Open(filename)
+	defer file.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -438,6 +506,7 @@ func readUint32(f os.File) uint32 {
 	number := binary.LittleEndian.Uint32(buffer)
 	return number
 }
+
 func readByte(f os.File) byte {
 	buffer := make([]byte, 1)
 	f.Read(buffer)
@@ -450,7 +519,7 @@ func readBytes(f os.File, length uint64) []byte {
 	return buffer
 }
 
-func readTOC(filename string, prefix string) map[string]string { //data, index, summary, filter
+func readTOC(filename, prefix, mode string) map[string]string { //data, index, summary, filter
 	readFile, err := os.Open(prefix + "/" + filename)
 
 	if err != nil {
@@ -467,10 +536,17 @@ func readTOC(filename string, prefix string) map[string]string { //data, index, 
 	readFile.Close()
 
 	fmap := make(map[string]string)
-	fmap["data"] = fileLines[0]
-	fmap["index"] = fileLines[1]
-	fmap["summary"] = fileLines[2]
-	fmap["filter"] = fileLines[3]
+	if mode == "one" {
+		fmap["data"] = fileLines[0]
+		fmap["index"] = fileLines[1]
+		fmap["summary"] = fileLines[2]
+		fmap["filter"] = fileLines[3]
+	} else {
+		fmap["data"] = fileLines[0]
+		fmap["index"] = fileLines[0]
+		fmap["summary"] = fileLines[0]
+		fmap["filter"] = fileLines[0]
+	}
 
 	return fmap
 }

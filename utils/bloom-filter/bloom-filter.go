@@ -47,15 +47,21 @@ func (bf *BloomFilter) Find(key string) bool {
 }
 
 // File structure will be 4 bytes for m and k respectively, m bytes for bits and k slices of 32 bytes for seeds
-func (bf *BloomFilter) MakeFile(path string, filename string) {
+func (bf *BloomFilter) MakeFile(path string, filename string, mode string) uint64 {
 	_, err := os.ReadDir(path)
 	if os.IsNotExist(err) {
 		os.MkdirAll(path, os.ModePerm)
 	} else if err != nil {
 		panic(err)
 	}
-
-	file, err := os.Create(path + filename)
+	var file *os.File
+	var start int64
+	if mode == "one" {
+		file, err = os.Create(path + filename)
+	} else {
+		file, err = os.OpenFile(filename, os.O_APPEND, 0600)
+		start, _ = file.Seek(0, os.SEEK_END)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -74,14 +80,15 @@ func (bf *BloomFilter) MakeFile(path string, filename string) {
 	}
 
 	file.Close()
+	return uint64(start)
 }
 
-func NewFromFile(name string) *BloomFilter {
+func NewFromFile(name string, fileOffset uint64) *BloomFilter {
 	file, err := os.Open(name)
 	if err != nil {
 		panic(err)
 	}
-
+	file.Seek(int64(fileOffset), os.SEEK_SET)
 	buff := make([]byte, 4)
 	binary.Read(file, binary.LittleEndian, buff)
 	m := binary.LittleEndian.Uint32(buff)
