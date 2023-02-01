@@ -23,6 +23,9 @@ func TestSStable(t *testing.T) {
 	}
 
 	CreateSStable(dbelems, count, "data/testTables", 0, mode)
+	file, _ := os.Open("data/testTables/usertable-L0-1-Data.db")
+	ReadRecord(file, 1000)
+
 }
 
 func TestFindKey(t *testing.T) {
