@@ -24,8 +24,8 @@ func TestMemTable(t *testing.T) {
 	elementsCnt := 100
 	capacity := 40
 
-	memtableTree := New(capacity, "btree", 4, 2, 3)
-	memtableList := New(capacity, "skiplist", 32, 0, 3)
+	memtableTree := New(capacity, "btree", 4, 2, 3, "many")
+	memtableList := New(capacity, "skiplist", 32, 0, 3, "many")
 
 	randomStr := make([]string, elementsCnt)
 	for i := 0; i < elementsCnt; i++ {

@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var mode string = "one"
+
 func TestSStable(t *testing.T) {
 	count := 3
 	dbelems := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
@@ -20,23 +22,23 @@ func TestSStable(t *testing.T) {
 		dbelems = append(dbelems, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: val})
 	}
 
-	CreateSStable(dbelems, count, "../../data/testTables", 1)
+	CreateSStable(dbelems, count, "data/testTables", 0, mode)
 }
 
 func TestFindKey(t *testing.T) {
-	prefix := "../../data/testTables"
-	found, dbel := Find("key0", prefix, 1)
+	prefix := "data/testTables"
+	found, dbel := Find("key0", prefix, 1, mode)
 	if !found || dbel == nil {
 		t.Fatalf("find not working")
 	}
-	found, _ = Find("key10", prefix, 1)
+	found, _ = Find("key10", prefix, 1, mode)
 	if found {
 		t.Fatalf("find not working")
 	}
-	found, dbel = Find("key7", prefix, 1)
+	found, dbel = Find("key7", prefix, 1, mode)
 	if !found || dbel == nil {
 		t.Fatalf("find not working")
 	}
 
-	os.RemoveAll(prefix)
+	os.RemoveAll("data/")
 }

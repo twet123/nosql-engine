@@ -17,6 +17,7 @@ type MemTable struct {
 	tree         *btree.BTree[string, database_elem.DatabaseElem]
 	list         *skiplist.SkipList
 	summaryCount int
+	sstableMode  string
 }
 
 // type MemTableElem struct {
@@ -26,7 +27,7 @@ type MemTable struct {
 // }
 
 // max representing max levels for skiplist or max elements in node for btree, min repsresents min elements in node for btree
-func New(capacity int, structType string, max uint64, min uint64, summaryCount int) *MemTable {
+func New(capacity int, structType string, max uint64, min uint64, summaryCount int, sstableMode string) *MemTable {
 	if structType == "btree" {
 		return &MemTable{
 			structType:   structType,
@@ -35,6 +36,7 @@ func New(capacity int, structType string, max uint64, min uint64, summaryCount i
 			tree:         btree.Init[string, database_elem.DatabaseElem](int(min), int(max)),
 			list:         nil,
 			summaryCount: summaryCount,
+			sstableMode:  sstableMode,
 		}
 	} else if structType == "skiplist" {
 		return &MemTable{
@@ -44,6 +46,7 @@ func New(capacity int, structType string, max uint64, min uint64, summaryCount i
 			tree:         nil,
 			list:         skiplist.New(int(max)),
 			summaryCount: summaryCount,
+			sstableMode:  sstableMode,
 		}
 	} else {
 		panic("Invalid structType!")
@@ -154,12 +157,12 @@ func (mt *MemTable) Flush() {
 	if mt.structType == "btree" {
 		prevMin := mt.tree.MinElementsCnt
 		prevMax := mt.tree.MaxElementsCnt
-		sstable.CreateSStable(mt.tree.SortedSlice(), mt.summaryCount, "data/usertables/", 0)
+		sstable.CreateSStable(mt.tree.SortedSlice(), mt.summaryCount, "data/usertables", 0, mt.sstableMode)
 		mt.tree = btree.Init[string, database_elem.DatabaseElem](prevMin, prevMax)
 	}
 	if mt.structType == "skiplist" {
 		prevMax := mt.list.MaxHeight
-		sstable.CreateSStable(mt.list.Flush(), mt.summaryCount, "data/usertables/", 0)
+		sstable.CreateSStable(mt.list.Flush(), mt.summaryCount, "data/usertables", 0, mt.sstableMode)
 		mt.list = skiplist.New(prevMax)
 	}
 
