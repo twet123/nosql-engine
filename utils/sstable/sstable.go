@@ -271,6 +271,17 @@ func readFileOffsets(filename string) (uint64, uint64, uint64) { //index, summar
 	return readUint64(*readFile), readUint64(*readFile), readUint64(*readFile)
 }
 
+func ReadFileOffset(filename string) uint64 { //index
+	readFile, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer readFile.Close()
+
+	readFile.Seek(-24, os.SEEK_END)
+	return readUint64(*readFile)
+}
+
 func CRC32(data []byte) uint32 {
 	return crc32.ChecksumIEEE(data)
 }
@@ -552,4 +563,27 @@ func readTOC(filename, prefix, mode string) map[string]string { //data, index, s
 	}
 
 	return fmap
+}
+
+// offset:
+//   - if file mode == "many" -> offset = readFile.seek(0, io.SeekEnd)
+//   - if file mode == "one" -> call function ReadFileOffset(filename) before opening that file
+func ReadRecord(readFile *os.File, offset uint64) (string, *database_elem.DatabaseElem) {
+
+	current, _ := readFile.Seek(0, io.SeekCurrent)
+	if current == int64(offset) {
+		return "", nil
+	}
+	readFile.Seek(int64(offset), io.SeekStart)
+	crc := readUint32(*readFile)
+	timestamp := readUint64(*readFile)
+	tombstone := readByte(*readFile)
+	key := readKey(*readFile)
+	length := readUint64(*readFile)
+	value := readBytes(*readFile, length)
+	equals := checkCRC(crc, timestamp, tombstone, key, value)
+	if !equals {
+		log.Fatal("crc not match values")
+	}
+	return key, &database_elem.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
 }
