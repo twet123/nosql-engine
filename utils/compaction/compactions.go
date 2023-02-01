@@ -3,10 +3,16 @@ package compaction
 import (
 	"bufio"
 	"encoding/binary"
+	"io/fs"
+	"io/ioutil"
+	config2 "nosql-engine/packages/utils/config"
 	db "nosql-engine/packages/utils/database"
+	database_elem "nosql-engine/packages/utils/database-elem"
 	GTypes "nosql-engine/packages/utils/generic-types"
 	"nosql-engine/packages/utils/sstable"
 	"os"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -34,6 +40,16 @@ type DataStructure struct {
 	value     []byte
 }
 
+type LSM struct {
+	maxLevel int
+	dirPath  string
+}
+
+func NewLSM(maxLevel int, dirPath string) *LSM {
+	return &LSM{maxLevel: maxLevel,
+		dirPath: dirPath}
+}
+
 func openFile(filepath string) *os.File {
 	file, err := os.OpenFile(filepath, os.O_RDONLY, 0700)
 	if err != nil {
@@ -42,8 +58,61 @@ func openFile(filepath string) *os.File {
 	return file
 }
 
-func mergeTables(filepath1 string, filepath2 string, level int) {
-	count := 3
+func (lsm *LSM) CompactionST() {
+	config := config2.GetConfig()
+
+	for i := 0; i < int(config.LsmLevels)-1; i++ {
+		files, err := ioutil.ReadDir(lsm.dirPath)
+		if err != nil {
+			panic(err)
+		}
+
+		tables := levelFilter(files, strconv.Itoa(i))
+
+		x := 0
+		y := 1
+		for j := 0; j < (len(tables) / 2); j++ {
+			orderNum := getDataFileOrderNum(tables[x])
+			filepath1 := "/usertable-L" + strconv.Itoa(i) + "-" + strconv.Itoa(orderNum) + "-Data.db"
+			orderNum = getDataFileOrderNum(tables[y])
+			filepath2 := "/usertable-L" + strconv.Itoa(i) + "-" + strconv.Itoa(orderNum) + "-Data.db"
+
+			mergeTables(filepath1, filepath2, i+1)
+
+			deleteOldFiles(tables[x], i)
+			deleteOldFiles(tables[y], i)
+			x += 2
+			y += 2
+		}
+	}
+
+}
+
+func levelFilter(tables []fs.FileInfo, level string) []string {
+	var retList []string
+	for _, table := range tables {
+		var s string = table.Name()
+		tableLvl := strings.Split(s, "-")[1]
+		if tableLvl != ("L"+level) || !strings.Contains(s, "Data.db") {
+			continue
+		}
+		retList = append(retList, table.Name())
+
+	}
+	return retList
+}
+func getDataFileOrderNum(filename string) int {
+	orderNum, err := strconv.Atoi(strings.Split(filename, "-")[2])
+	if err != nil {
+		panic(err)
+	}
+	return orderNum
+
+}
+
+func mergeTables(filepath1, filepath2 string, level int) {
+	config := config2.GetConfig()
+	count := config.SummaryCount
 
 	table1 := openFile(filepath1)
 	defer table1.Close()
@@ -55,14 +124,14 @@ func mergeTables(filepath1 string, filepath2 string, level int) {
 	reader2 := bufio.NewReader(table2)
 
 	logs := make([]DataStructure, 0) //not final solution
-	compareTables(reader1, reader2, logs)
+	mergeTwoTables(reader1, reader2, logs)
 
 	list := convertList(logs)
 	sstable.CreateSStable(list, count, "files", level)
 
 }
 
-func compareTables(reader1, reader2 *bufio.Reader, logs []DataStructure) {
+func mergeTwoTables(reader1, reader2 *bufio.Reader, logs []DataStructure) {
 	i := 0
 	var end bool = false
 	var err1, err2 error
@@ -245,4 +314,35 @@ func convertList(list []DataStructure) []GTypes.KeyVal[string, database_elem.Dat
 		dbelems = append(dbelems, GTypes.KeyVal[string, db.DatabaseElem]{Key: list[i].key, Value: val})
 	}
 	return dbelems
+}
+
+func deleteOldFiles(table string, level int) {
+	var orderNum int
+	orderNum = getDataFileOrderNum(table)
+	name := "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(orderNum) + "-"
+	err := os.Remove(name + "Filter.db")
+	if err != nil {
+		panic(err)
+	}
+	err = os.Remove(name + "Index.db")
+	if err != nil {
+		panic(err)
+	}
+	err = os.Remove(name + "Summary.db")
+	if err != nil {
+		panic(err)
+	}
+	err = os.Remove(name + "Data.db")
+	if err != nil {
+		panic(err)
+	}
+	err = os.Remove(name + "Metadata.db")
+	if err != nil {
+		panic(err)
+	}
+	err = os.Remove(name + "TOC.txt")
+	if err != nil {
+		panic(err)
+	}
+
 }
