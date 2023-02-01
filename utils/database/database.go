@@ -113,3 +113,5 @@ func (db *Database) Get(key string) []byte {
 }
 
 // treba dodati citanje iz wala i rekonstrukciju memtable-a
+// dodati tipove
+// dodati rate limiting/token bucket
