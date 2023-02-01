@@ -568,6 +568,8 @@ func readTOC(filename, prefix, mode string) map[string]string { //data, index, s
 // offset:
 //   - if file mode == "many" -> offset = readFile.seek(0, io.SeekEnd)
 //   - if file mode == "one" -> call function ReadFileOffset(filename) before opening that file
+//
+// readFile - file pointer
 func ReadRecord(readFile *os.File, offset uint64) (string, *database_elem.DatabaseElem) {
 
 	current, _ := readFile.Seek(0, io.SeekCurrent)
