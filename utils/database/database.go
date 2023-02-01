@@ -20,20 +20,33 @@ type Database struct {
 func New() *Database {
 	config := config.GetConfig()
 
+	walObj := wal.New("data/wal", uint32(config.WalSegmentSize), 0)
+	walEntries := walObj.ReadAllEntries()
+
+	var memtableObj *memtable.MemTable
 	if config.MemtableStructure == "btree" {
-		return &Database{
-			config:   *config,
-			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.BTreeMax, config.BTreeMin, int(config.SummaryCount), config.SSTableFiles),
-			wal:      *wal.New("data/wal/", uint32(config.WalSegmentSize), 0),
-			cache:    cache.New(int(config.CacheSize)),
-		}
+		memtableObj = memtable.New(int(config.MemtableSize), config.MemtableStructure, config.BTreeMax, config.BTreeMin, int(config.SummaryCount), config.SSTableFiles)
 	} else {
-		return &Database{
-			config:   *config,
-			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.SkipListLevels, 0, int(config.SummaryCount), config.SSTableFiles),
-			wal:      *wal.New("data/wal/", uint32(config.WalSegmentSize), 0),
-			cache:    cache.New(int(config.CacheSize)),
+		memtableObj = memtable.New(int(config.MemtableSize), config.MemtableStructure, config.SkipListLevels, 0, int(config.SummaryCount), config.SSTableFiles)
+	}
+
+	for _, entry := range walEntries {
+		memtableObj.Insert(entry.Key, database_elem.DatabaseElem{
+			Value:     entry.Value,
+			Tombstone: entry.Tombstone,
+			Timestamp: entry.Timestamp,
+		})
+
+		if memtableObj.CheckFlushed() {
+			walObj.EmptyWAL()
 		}
+	}
+
+	return &Database{
+		config:   *config,
+		memtable: *memtableObj,
+		wal:      *walObj,
+		cache:    cache.New(int(config.CacheSize)),
 	}
 }
 
