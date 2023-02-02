@@ -1,4 +1,4 @@
-package main
+package compaction
 
 import (
 	"bufio"
@@ -22,7 +22,6 @@ func openFile(filepath string) *os.File {
 	}
 	return file
 }
-
 func levelFilter(tables []fs.FileInfo, level string) []string {
 	var retList []string
 	for _, table := range tables {
@@ -45,27 +44,29 @@ func getDataFileOrderNum(filename string) int {
 
 }
 
-func needsCompaction(level int, files []fs.FileInfo, maxPerLevel uint64) bool {
+// provjera da li je potrebna kompakcija datog nivoa
+func NeedsCompaction(level int, files []fs.FileInfo, maxPerLevel uint64) bool {
 	tables := levelFilter(files, strconv.Itoa(level))
 	if len(tables) > int(maxPerLevel) {
 		return true
 	}
 	return false
 }
+
 func MergeCompaction(level int, dirPath string) {
 
 	config := config2.GetConfig()
 	count := config.SummaryCount
 	maxPerLevel := config.LsmMaxPerLevel
 	maxLevels := config.LsmLevels
-	mode := "many"
+	mode := config.SSTableFiles
 
 	files, err := ioutil.ReadDir(dirPath)
 	if err != nil {
 		panic(err)
 	}
 
-	if !needsCompaction(level, files, maxPerLevel) {
+	if !NeedsCompaction(level, files, maxPerLevel) {
 		return
 	}
 	tables := levelFilter(files, strconv.Itoa(level)) //[]naziv_fajlova
@@ -149,13 +150,13 @@ func mergeTwoTables(path1, path2 string, logs []GTypes.KeyVal[string, database_e
 			//ako smo stigli do kraja prve tabele, upisujemo logove iz druge tabele
 			logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key2, Value: *val2})
 			i++
-			finishMerge(table2, offset2, logs)
+			logs = finishMerge(table2, offset2, logs)
 			break
 		} else if val1 != nil && val2 == nil {
 			//ako smo stigli do kraja druge tabele, upisujemo logove iz prve tabele
 			logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key1, Value: *val1})
 			i++
-			finishMerge(table1, offset1, logs)
+			logs = finishMerge(table1, offset1, logs)
 			break
 		} else if val1 == nil && val2 == nil {
 			//ako smo stigli do kraja obe tabele,kraj fje,
@@ -168,7 +169,7 @@ func mergeTwoTables(path1, path2 string, logs []GTypes.KeyVal[string, database_e
 
 }
 
-func finishMerge(table *os.File, offset int64, logs []GTypes.KeyVal[string, database_elem.DatabaseElem]) {
+func finishMerge(table *os.File, offset int64, logs []GTypes.KeyVal[string, database_elem.DatabaseElem]) []GTypes.KeyVal[string, database_elem.DatabaseElem] {
 
 	for {
 		key, val := sstable.ReadRecord(table, uint64(offset))
@@ -177,6 +178,7 @@ func finishMerge(table *os.File, offset int64, logs []GTypes.KeyVal[string, data
 		}
 		logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: *val})
 	}
+	return logs
 }
 
 func compareLogs(key1, key2 string, val1, val2 *database_elem.DatabaseElem, logs []GTypes.KeyVal[string, database_elem.DatabaseElem]) (int, []GTypes.KeyVal[string, database_elem.DatabaseElem]) {
@@ -209,6 +211,7 @@ func compareLogs(key1, key2 string, val1, val2 *database_elem.DatabaseElem, logs
 	return 0, logs
 }
 
+// brise fajlove stare sstabele
 func deleteOldFiles(prefix, table string, level int) {
 	var orderNum int
 	orderNum = getDataFileOrderNum(table)
