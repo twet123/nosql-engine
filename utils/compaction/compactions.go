@@ -1,4 +1,4 @@
-package main
+package compaction
 
 import (
 	"bufio"
@@ -15,41 +15,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-const (
-	CRC_SIZE        = 4
-	TIMESTAMP_SIZE  = 8
-	TOMBSTONE_SIZE  = 1
-	KEY_SIZE_SIZE   = 8
-	VALUE_SIZE_SIZE = 8
-
-	CRC_START        = 0
-	TIMESTAMP_START  = CRC_START + CRC_SIZE
-	TOMBSTONE_START  = TIMESTAMP_START + TIMESTAMP_SIZE
-	KEY_SIZE_START   = TOMBSTONE_START + TOMBSTONE_SIZE
-	VALUE_SIZE_START = KEY_SIZE_START + KEY_SIZE_SIZE
-	KEY_START        = VALUE_SIZE_START + VALUE_SIZE_SIZE
-)
-
-type DataStructure struct {
-	CRC       uint32
-	timestamp uint64
-	tombstone byte
-	keySize   uint64
-	valueSize uint64
-	key       string
-	value     []byte
-}
-
-type LSM struct {
-	maxLevel int
-	dirPath  string
-}
-
-func NewLSM(maxLevel int, dirPath string) *LSM {
-	return &LSM{maxLevel: maxLevel,
-		dirPath: dirPath}
-}
 
 func openFile(filepath string) *os.File {
 	file, err := os.OpenFile(filepath, os.O_RDONLY, 0700)
@@ -81,24 +46,35 @@ func getDataFileOrderNum(filename string) int {
 
 }
 
-func mergeCompaction(level int, dirPath string) {
+func needsCompaction(level int, files []fs.FileInfo, maxPerLevel uint64) bool {
+	tables := levelFilter(files, strconv.Itoa(level))
+	if len(tables) > int(maxPerLevel) {
+		return true
+	}
+	return false
+}
+func MergeCompaction(level int, dirPath string) {
 
 	config := config2.GetConfig()
 	count := config.SummaryCount
-	mode := config.SSTableFiles
+	maxPerLevel := config.LsmMaxPerLevel
+	maxLevels := config.LsmLevels
+	mode := "many"
 
 	files, err := ioutil.ReadDir(dirPath)
 	if err != nil {
 		panic(err)
 	}
 
+	if !needsCompaction(level, files, maxPerLevel) {
+		return
+	}
 	tables := levelFilter(files, strconv.Itoa(level)) //[]naziv_fajlova
 
 	for len(tables) > 1 {
 
 		//uzimamo dvije najmanje tabele i spajamo ih
 		//sort.Sort(SortByOther(TwoSlices{filepath_slice: tables, reader_slice: readers}))
-		//reader1, reader2 := readers[0], readers[1]
 		table1, table2 := tables[0], tables[1]
 
 		merged := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
@@ -122,6 +98,10 @@ func mergeCompaction(level int, dirPath string) {
 		fmt.Println(tables)
 
 	}
+	if level < int(maxLevels)-1 {
+		//nema kompakcije na poslednjem nivou
+		MergeCompaction(level+1, dirPath)
+	}
 
 }
 
@@ -139,6 +119,8 @@ func mergeTwoTables(path1, path2 string, logs []GTypes.KeyVal[string, database_e
 	if mode == "many" {
 		offset1, _ = table1.Seek(0, io.SeekEnd)
 		offset2, _ = table2.Seek(0, io.SeekEnd)
+		table1.Seek(0, io.SeekStart)
+		table2.Seek(0, io.SeekStart)
 	} else {
 		offset1 = int64(sstable.ReadFileOffset(path1))
 		offset2 = int64(sstable.ReadFileOffset(path2))
@@ -235,7 +217,7 @@ func compareLogs(key1, key2 string, val1, val2 *database_elem.DatabaseElem, logs
 func deleteOldFiles(prefix, table string, level int) {
 	var orderNum int
 	orderNum = getDataFileOrderNum(table)
-	name := prefix + "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(orderNum) + "-TOC.db"
+	name := prefix + "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(orderNum) + "-TOC.txt"
 	tocFile, err := os.Open(name)
 	if err != nil {
 		log.Fatal(err)
@@ -248,5 +230,12 @@ func deleteOldFiles(prefix, table string, level int) {
 		if err != nil {
 			log.Fatal(err)
 		}
+	}
+
+	tocFile.Close()
+
+	err = os.Remove(name)
+	if err != nil {
+		log.Fatal(err)
 	}
 }

@@ -17,6 +17,7 @@ type Config struct {
 	CacheSize         uint64 `yaml:"cache_size"`
 	LsmLevels         uint64 `yaml:"lsm_levels"`
 	SSTableFiles      string `yaml:"sstable_files"`
+	LsmMaxPerLevel    uint64 `yaml:"lsm_max_per_level"`
 }
 
 func GetConfig() *Config {
@@ -34,6 +35,7 @@ func GetConfig() *Config {
 		config.CacheSize = 10
 		config.LsmLevels = 4
 		config.SSTableFiles = "many"
+		config.LsmMaxPerLevel = 5
 	} else {
 		yaml.Unmarshal(configData, &config)
 	}

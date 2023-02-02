@@ -8,4 +8,5 @@ summary_count: 3
 cache_size: 10
 lsm_levels: 4
 sstable_files: "one"
+lsm_max_per_level: 5
 # add more things as they come up to your mind
