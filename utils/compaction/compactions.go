@@ -195,17 +195,13 @@ func compareLogs(key1, key2 string, val1, val2 *database_elem.DatabaseElem, logs
 		//ako su kljucevi jednaki,gledamo koji log je noviji
 		//ako je tombostone!=1 upisujemo ga u novu tabelu
 		if val1.Timestamp > val2.Timestamp {
-			if val1.Tombstone == byte(0) {
-				logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key1, Value: *val1})
-				return 0, logs
-			}
 
+			logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key1, Value: *val1})
+			return 0, logs
 		} else {
-			if val2.Tombstone == byte(0) {
-				logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key2, Value: *val2})
-				return 0, logs
-			}
 
+			logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key2, Value: *val2})
+			return 0, logs
 		}
 	}
 	return 0, logs
