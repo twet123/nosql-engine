@@ -4,6 +4,7 @@ import (
 	"nosql-engine/packages/utils/cache"
 	"nosql-engine/packages/utils/config"
 	database_elem "nosql-engine/packages/utils/database-elem"
+	"nosql-engine/packages/utils/hll"
 	"nosql-engine/packages/utils/memtable"
 	"nosql-engine/packages/utils/sstable"
 	"nosql-engine/packages/utils/wal"
@@ -20,7 +21,7 @@ type Database struct {
 func New() *Database {
 	config := config.GetConfig()
 
-	walObj := wal.New("data/wal", uint32(config.WalSegmentSize), 0)
+	walObj := wal.New("data/wal/", uint32(config.WalSegmentSize), 0)
 	walEntries := walObj.ReadAllEntries()
 
 	var memtableObj *memtable.MemTable
@@ -125,6 +126,40 @@ func (db *Database) Get(key string) []byte {
 	return nil
 }
 
-// treba dodati citanje iz wala i rekonstrukciju memtable-a
-// dodati tipove
+func (db *Database) NewHLL(key string, precision uint8) bool {
+	hllObj := hll.New(precision)
+	if hllObj == nil {
+		return false
+	}
+
+	return db.Put("hll_"+key, hllObj.Serialize())
+}
+
+func (db *Database) HLLAdd(key string, keyToAdd string) bool {
+	hllSerialization := db.Get("hll_" + key)
+
+	if hllSerialization == nil {
+		return false
+	}
+
+	hllObj := hll.Deserialize(hllSerialization)
+	hllObj.Add(keyToAdd)
+
+	return db.Put("hll_"+key, hllObj.Serialize())
+}
+
+// first return value tells if the operation succeeded, the second one is the result
+func (db *Database) HLLEstimate(key string) (bool, float64) {
+	hllSerialization := db.Get("hll_" + key)
+
+	if hllSerialization == nil {
+		return false, 0
+	}
+
+	hllObj := hll.Deserialize(hllSerialization)
+
+	return true, hllObj.Estimate()
+}
+
+// dodati tipove (serijalizacija gotova)
 // dodati rate limiting/token bucket
