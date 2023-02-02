@@ -31,4 +31,11 @@ func TestHLL(t *testing.T) {
 	if hll.Estimate() <= 1 {
 		t.Fatalf("HLL failed. " + fmt.Sprintf("%f", hll.Estimate()))
 	}
+
+	serialization := hll.Serialize()
+	hll = Deserialize(serialization)
+
+	if hll.Estimate() <= 1 {
+		t.Fatalf("HLL serialization failed.")
+	}
 }
