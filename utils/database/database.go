@@ -2,6 +2,7 @@ package database
 
 import (
 	"nosql-engine/packages/utils/cache"
+	"nosql-engine/packages/utils/cms"
 	"nosql-engine/packages/utils/config"
 	database_elem "nosql-engine/packages/utils/database-elem"
 	"nosql-engine/packages/utils/hll"
@@ -159,6 +160,37 @@ func (db *Database) HLLEstimate(key string) (bool, float64) {
 	hllObj := hll.Deserialize(hllSerialization)
 
 	return true, hllObj.Estimate()
+}
+
+func (db *Database) NewCMS(key string, precision float64, certainty float64) bool {
+	cmsObj := cms.New(precision, certainty)
+
+	return db.Put("cms_"+key, cmsObj.Serialize())
+}
+
+func (db *Database) CMSAdd(key string, keyToAdd string) bool {
+	cmsSerialization := db.Get("cms_" + key)
+
+	if cmsSerialization == nil {
+		return false
+	}
+
+	cmsObj := cms.Deserialize(cmsSerialization)
+	cmsObj.Add(keyToAdd)
+
+	return db.Put("cms_"+key, cmsObj.Serialize())
+}
+
+func (db *Database) CMSCount(key string, keyToCount string) (bool, uint64) {
+	cmsSerialization := db.Get("cms_" + key)
+
+	if cmsSerialization == nil {
+		return false, 0
+	}
+
+	cmsObj := cms.Deserialize(cmsSerialization)
+
+	return true, cmsObj.CountMin(keyToCount)
 }
 
 // dodati tipove (serijalizacija gotova)

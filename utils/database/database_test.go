@@ -75,5 +75,22 @@ func TestDatabase(t *testing.T) {
 		t.Fatalf("Database HLL estimate failed %f", hllRes)
 	}
 
+	// testing db CMS
+	db.NewCMS("myCMS", 0.1, 0.01)
+
+	for i := 0; i < elementsCnt; i++ {
+		if !db.CMSAdd("myCMS", randomStr[i]) {
+			t.Fatalf("Database CMS add failed")
+		}
+	}
+
+	for i := 0; i < elementsCnt; i++ {
+		succ, cmsRes := db.CMSCount("myCMS", randomStr[i])
+
+		if !succ || cmsRes < 1 {
+			t.Fatalf("Database CMS counting failed %x", cmsRes)
+		}
+	}
+
 	os.RemoveAll("./data")
 }
