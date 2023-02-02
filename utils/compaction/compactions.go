@@ -1,10 +1,12 @@
-package compaction
+package main
 
 import (
 	"bufio"
-	"encoding/binary"
+	"fmt"
+	"io"
 	"io/fs"
 	"io/ioutil"
+	"log"
 	config2 "nosql-engine/packages/utils/config"
 	database_elem "nosql-engine/packages/utils/database-elem"
 	GTypes "nosql-engine/packages/utils/generic-types"
@@ -57,36 +59,6 @@ func openFile(filepath string) *os.File {
 	return file
 }
 
-func (lsm *LSM) CompactionST() {
-	config := config2.GetConfig()
-
-	for i := 0; i < int(config.LsmLevels)-1; i++ {
-		files, err := ioutil.ReadDir(lsm.dirPath)
-		if err != nil {
-			panic(err)
-		}
-
-		tables := levelFilter(files, strconv.Itoa(i))
-
-		x := 0
-		y := 1
-		for j := 0; j < (len(tables) / 2); j++ {
-			orderNum := getDataFileOrderNum(tables[x])
-			filepath1 := "/usertable-L" + strconv.Itoa(i) + "-" + strconv.Itoa(orderNum) + "-Data.db"
-			orderNum = getDataFileOrderNum(tables[y])
-			filepath2 := "/usertable-L" + strconv.Itoa(i) + "-" + strconv.Itoa(orderNum) + "-Data.db"
-
-			mergeTables(filepath1, filepath2, i+1)
-
-			deleteOldFiles(tables[x], i)
-			deleteOldFiles(tables[y], i)
-			x += 2
-			y += 2
-		}
-	}
-
-}
-
 func levelFilter(tables []fs.FileInfo, level string) []string {
 	var retList []string
 	for _, table := range tables {
@@ -109,239 +81,172 @@ func getDataFileOrderNum(filename string) int {
 
 }
 
-func mergeTables(filepath1, filepath2 string, level int) {
+func mergeCompaction(level int, dirPath string) {
+
 	config := config2.GetConfig()
 	count := config.SummaryCount
+	mode := config.SSTableFiles
 
-	table1 := openFile(filepath1)
-	defer table1.Close()
+	files, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		panic(err)
+	}
 
-	table2 := openFile(filepath2)
-	defer table2.Close()
+	tables := levelFilter(files, strconv.Itoa(level)) //[]naziv_fajlova
 
-	reader1 := bufio.NewReader(table1)
-	reader2 := bufio.NewReader(table2)
+	for len(tables) > 1 {
 
-	logs := make([]DataStructure, 0) //not final solution
-	mergeTwoTables(reader1, reader2, logs)
+		//uzimamo dvije najmanje tabele i spajamo ih
+		//sort.Sort(SortByOther(TwoSlices{filepath_slice: tables, reader_slice: readers}))
+		//reader1, reader2 := readers[0], readers[1]
+		table1, table2 := tables[0], tables[1]
 
-	list := convertList(logs)
-	sstable.CreateSStable(list, int(count), "files", level)
+		merged := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
+		merged = mergeTwoTables(dirPath+"/"+table1, dirPath+"/"+table2, merged, mode)
+
+		if len(tables) != 2 {
+			sstable.CreateSStable(merged, int(count), dirPath, level, mode)
+		} else {
+			sstable.CreateSStable(merged, int(count), dirPath, level+1, mode)
+		}
+
+		deleteOldFiles(dirPath, table1, level)
+		deleteOldFiles(dirPath, table2, level)
+
+		files, err = ioutil.ReadDir(dirPath)
+		if err != nil {
+			panic(err)
+		}
+
+		tables = levelFilter(files, strconv.Itoa(level))
+		fmt.Println(tables)
+
+	}
 
 }
 
-func mergeTwoTables(reader1, reader2 *bufio.Reader, logs []DataStructure) {
+func mergeTwoTables(path1, path2 string, logs []GTypes.KeyVal[string, database_elem.DatabaseElem], mode string) []GTypes.KeyVal[string, database_elem.DatabaseElem] {
 	i := 0
-	var end bool = false
-	var err1, err2 error
+	var offset1, offset2 int64
+	var k int
 
-	e1, err := readLog(reader1)
-	if err != nil {
-		panic(err)
+	table1 := openFile(path1)
+	defer table1.Close()
+
+	table2 := openFile(path2)
+	defer table2.Close()
+
+	if mode == "many" {
+		offset1, _ = table1.Seek(0, io.SeekEnd)
+		offset2, _ = table2.Seek(0, io.SeekEnd)
+	} else {
+		offset1 = int64(sstable.ReadFileOffset(path1))
+		offset2 = int64(sstable.ReadFileOffset(path2))
 	}
-	e2, err := readLog(reader2)
-	if err != nil {
-		panic(err)
+
+	key1, val1 := sstable.ReadRecord(table1, uint64(offset1))
+	if val1 == nil {
+		log.Fatal()
+	}
+	key2, val2 := sstable.ReadRecord(table2, uint64(offset2))
+	if val2 == nil {
+		log.Fatal()
 	}
 
-	for !end {
-		if e1.key < e2.key {
-			//writeLog(e1)
-			logs = append(logs, e1)
-			i++
+	for {
+		fmt.Println("1")
 
-			e1, err = readLog(reader1)
+		k, logs = compareLogs(key1, key2, val1, val2, logs)
 
-			//ako je doslo do kraja prve sstabele
-			if err != nil {
-				//writeLog(e2)
-				logs = append(logs, e2)
-				i++
-
-				finishMerge(reader2, logs)
-				break
-
-			}
-		} else if e1.key > e2.key {
-			//writeLog(e2)
-			logs = append(logs, e2)
-			i++
-
-			e2, err = readLog(reader2)
-			//ako je doslo do kraja druge sstabele
-			if err != nil {
-				//writeLog(e1)
-				logs = append(logs, e1)
-				i++
-
-				finishMerge(reader1, logs)
-				break
-			}
-		} else {
-			if e1.timestamp > e2.timestamp {
-				if e1.tombstone == byte(0) {
-					//writeLog(e1)
-					logs = append(logs, e1)
-					i++
-				}
-			} else {
-				if e2.tombstone == byte(0) {
-					//writeLog(e2)
-					logs = append(logs, e2)
-					i++
-				}
-			}
+		//citamo naredne logove
+		if k == 1 {
+			key1, val1 = sstable.ReadRecord(table1, uint64(offset1))
+		} else if k == 2 {
+			key2, val2 = sstable.ReadRecord(table2, uint64(offset2))
+		} else if k == 0 {
+			key1, val1 = sstable.ReadRecord(table1, uint64(offset1))
+			key2, val2 = sstable.ReadRecord(table2, uint64(offset2))
 		}
 
-		//citamo naredne logove iz obe tabele
-		e1, err1 = readLog(reader1)
-		e2, err2 = readLog(reader2)
-
-		if err1 != nil && err2 == nil {
+		if val1 == nil && val2 != nil {
 			//ako smo stigli do kraja prve tabele, upisujemo logove iz druge tabele
-			logs = append(logs, e2)
+			logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key2, Value: *val2})
 			i++
-			finishMerge(reader2, logs)
+			finishMerge(table2, offset2, logs)
 			break
-		} else if err1 == nil && err2 != nil {
+		} else if val1 != nil && val2 == nil {
 			//ako smo stigli do kraja druge tabele, upisujemo logove iz prve tabele
-			logs = append(logs, e1)
+			logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key1, Value: *val1})
 			i++
-			finishMerge(reader1, logs)
+			finishMerge(table1, offset1, logs)
 			break
-		} else if err1 == nil && err2 == nil {
+		} else if val1 == nil && val2 == nil {
 			//ako smo stigli do kraja obe tabele,kraj fje,
 			//mozda bude trebalo nesto za index,summary,toc file
 			break
 		}
 
 	}
+	return logs
 
 }
 
-func finishMerge(reader *bufio.Reader, logs []DataStructure) {
+func finishMerge(table *os.File, offset int64, logs []GTypes.KeyVal[string, database_elem.DatabaseElem]) {
 
 	for {
-		e, err := readLog(reader)
-		if err != nil {
+		key, val := sstable.ReadRecord(table, uint64(offset))
+		if val == nil {
 			break
 		}
-		logs = append(logs, e)
+		logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: *val})
 	}
 }
 
-func readLog(reader *bufio.Reader) (DataStructure, error) {
-	e := DataStructure{}
+func compareLogs(key1, key2 string, val1, val2 *database_elem.DatabaseElem, logs []GTypes.KeyVal[string, database_elem.DatabaseElem]) (int, []GTypes.KeyVal[string, database_elem.DatabaseElem]) {
 
-	err := binary.Read(reader, binary.LittleEndian, &e.CRC)
-	if err != nil {
-		return e, err
+	if key1 < key2 {
+		logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key1, Value: *val1})
+		return 1, logs
+
+	} else if key1 > key2 {
+		logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key2, Value: *val2})
+		return 2, logs
+
+	} else {
+		//ako su kljucevi jednaki,gledamo koji log je noviji
+		//ako je tombostone!=1 upisujemo ga u novu tabelu
+		if val1.Timestamp > val2.Timestamp {
+			if val1.Tombstone == byte(0) {
+				logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key1, Value: *val1})
+				return 0, logs
+			}
+
+		} else {
+			if val2.Tombstone == byte(0) {
+				logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key2, Value: *val2})
+				return 0, logs
+			}
+
+		}
 	}
-
-	err = binary.Read(reader, binary.LittleEndian, &e.timestamp)
-	if err != nil {
-		return e, err
-	}
-
-	err = binary.Read(reader, binary.LittleEndian, &e.tombstone)
-	if err != nil {
-		return e, err
-	}
-
-	err = binary.Read(reader, binary.LittleEndian, &e.keySize)
-	if err != nil {
-		return e, err
-	}
-
-	err = binary.Read(reader, binary.LittleEndian, &e.valueSize)
-	if err != nil {
-		return e, err
-	}
-
-	key := make([]byte, e.keySize)
-	err = binary.Read(reader, binary.LittleEndian, &key)
-	if err != nil {
-		return e, err
-	}
-
-	e.key = string(key)
-
-	value := make([]byte, e.valueSize)
-	err = binary.Read(reader, binary.LittleEndian, &value)
-	if err != nil {
-		return e, err
-	}
-	e.value = value
-
-	return e, nil
+	return 0, logs
 }
 
-func writeLog(e DataStructure) {
-	//nije dovrseno, fale pokazivaci na fajlove koji nastanu prilikom kreiranja sstabele
-	crc32 := make([]byte, CRC_SIZE)
-	binary.LittleEndian.PutUint32(crc32, e.CRC)
-
-	timestamp := make([]byte, TIMESTAMP_SIZE)
-	binary.LittleEndian.PutUint64(timestamp, e.timestamp)
-
-	tombstone := []byte{0}
-	if e.tombstone == 1 {
-		tombstone[0] = 1
-	}
-
-	keySize := make([]byte, KEY_SIZE_SIZE)
-	binary.LittleEndian.PutUint64(keySize, e.keySize)
-
-	valueSize := make([]byte, VALUE_SIZE_SIZE)
-	binary.LittleEndian.PutUint64(valueSize, e.valueSize)
-
-	recordList := make([]byte, 0, CRC_SIZE+TIMESTAMP_SIZE+TOMBSTONE_SIZE+KEY_SIZE_SIZE+VALUE_SIZE_SIZE+e.keySize+e.valueSize)
-	recordList = append(recordList, crc32...)
-	recordList = append(recordList, timestamp...)
-	recordList = append(recordList, tombstone...)
-	recordList = append(recordList, keySize...)
-	recordList = append(recordList, valueSize...)
-	recordList = append(recordList, []byte(e.key)...)
-	recordList = append(recordList, e.value...)
-
-}
-
-func convertList(list []DataStructure) []GTypes.KeyVal[string, database_elem.DatabaseElem] {
-	dbelems := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
-	for i := 0; i < len(list); i++ {
-		val := database_elem.DatabaseElem{Tombstone: list[i].tombstone, Value: list[i].value, Timestamp: list[i].timestamp}
-		dbelems = append(dbelems, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: list[i].key, Value: val})
-	}
-	return dbelems
-}
-
-func deleteOldFiles(table string, level int) {
+func deleteOldFiles(prefix, table string, level int) {
 	var orderNum int
 	orderNum = getDataFileOrderNum(table)
-	name := "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(orderNum) + "-"
-	err := os.Remove(name + "Filter.db")
+	name := prefix + "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(orderNum) + "-TOC.db"
+	tocFile, err := os.Open(name)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-	err = os.Remove(name + "Index.db")
-	if err != nil {
-		panic(err)
-	}
-	err = os.Remove(name + "Summary.db")
-	if err != nil {
-		panic(err)
-	}
-	err = os.Remove(name + "Data.db")
-	if err != nil {
-		panic(err)
-	}
-	err = os.Remove(name + "Metadata.db")
-	if err != nil {
-		panic(err)
-	}
-	err = os.Remove(name + "TOC.txt")
-	if err != nil {
-		panic(err)
-	}
+	fileScanner := bufio.NewScanner(tocFile)
+	fileScanner.Split(bufio.ScanLines)
 
+	for fileScanner.Scan() {
+		err = os.Remove(fileScanner.Text())
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
