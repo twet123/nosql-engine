@@ -661,17 +661,6 @@ func checkPrefixIndex(key string, filename string, start uint64, stop uint64) []
 	}
 }
 
-func ReadFileOffset(filename string) uint64 { //index
-	readFile, err := os.Open(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer readFile.Close()
-
-	readFile.Seek(-24, os.SEEK_END)
-	return readUint64(*readFile)
-}
-
 // offset:
 //   - if file mode == "many" -> offset = readFile.seek(0, io.SeekEnd)
 //   - if file mode == "one" -> call function ReadFileOffset(filename) before opening that file
