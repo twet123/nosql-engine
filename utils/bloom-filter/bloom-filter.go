@@ -117,3 +117,50 @@ func NewFromFile(name string, fileOffset uint64) *BloomFilter {
 		hashFunctions: hashFunctions,
 	}
 }
+
+func (bf *BloomFilter) Serialize() []byte {
+	ret := make([]byte, 0)
+
+	// put m
+	ret = binary.BigEndian.AppendUint32(ret, uint32(bf.m))
+	// put k
+	ret = binary.BigEndian.AppendUint32(ret, uint32(bf.k))
+	// put bits
+	ret = append(ret, bf.bits...)
+	// put hashFunctions
+	for _, hashFn := range bf.hashFunctions {
+		ret = append(ret, hashFn.Seed...)
+	}
+
+	return ret
+}
+
+func Deserialize(byteArr []byte) *BloomFilter {
+	//get m
+	m := binary.BigEndian.Uint32(byteArr[0:4])
+	// get k
+	k := binary.BigEndian.Uint32(byteArr[4:8])
+
+	byteArr = byteArr[8:]
+
+	// get bits
+	bits := make([]byte, m)
+	copy(bits, byteArr[0:m])
+
+	byteArr = byteArr[m:]
+
+	// get hashFunctions (seeds)
+	hashFunctions := make([]hash.HashWithSeed, k)
+	for i := uint32(0); i < k; i++ {
+		seed := byteArr[0:32]
+		hashFunctions[i].Seed = seed
+		byteArr = byteArr[32:]
+	}
+
+	return &BloomFilter{
+		m:             uint(m),
+		k:             uint(k),
+		bits:          bits,
+		hashFunctions: hashFunctions,
+	}
+}

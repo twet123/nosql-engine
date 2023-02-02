@@ -11,9 +11,9 @@ const (
 )
 
 type HLL struct {
-	m   uint64
-	p   uint8
-	reg []uint8
+	m   uint64  // size of reg (2^p)
+	p   uint8   // precision
+	reg []uint8 // reg
 }
 
 func New(p uint8) *HLL {
@@ -100,5 +100,33 @@ func (hll *HLL) Add(key string) {
 
 	if value > hll.reg[bucket] {
 		hll.reg[bucket] = value
+	}
+}
+
+func (hll *HLL) Serialize() []byte {
+	ret := make([]byte, 1)
+
+	// put p in ret
+	ret[0] = hll.p
+	// we don't have to put m in the serialized array, because m is 2^p
+	// put reg in ret
+	ret = append(ret, hll.reg...)
+
+	return ret
+}
+
+func Deserialize(byteArr []byte) *HLL {
+	// get p
+	p := byteArr[0]
+	// get m
+	m := uint64(math.Exp2(float64(p)))
+	// get reg
+	reg := make([]byte, m)
+	copy(reg, byteArr[1:])
+
+	return &HLL{
+		p:   p,
+		m:   m,
+		reg: reg,
 	}
 }
