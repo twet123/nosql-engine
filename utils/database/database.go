@@ -8,6 +8,7 @@ import (
 	database_elem "nosql-engine/packages/utils/database-elem"
 	"nosql-engine/packages/utils/hll"
 	"nosql-engine/packages/utils/memtable"
+	simhash "nosql-engine/packages/utils/sim-hash"
 	"nosql-engine/packages/utils/sstable"
 	"nosql-engine/packages/utils/wal"
 	"time"
@@ -225,5 +226,22 @@ func (db *Database) BFFind(key string, keyToFind string) bool {
 	return bfObj.Find(keyToFind)
 }
 
-// dodati tipove (serijalizacija gotova)
+func (db *Database) NewSH(key string, bits uint) bool {
+	shObj := simhash.New(bits)
+
+	return db.Put("sh_"+key, shObj.Serialize())
+}
+
+func (db *Database) SHCompare(key string, string1 string, string2 string) (bool, uint) {
+	shSerialization := db.Get("sh_" + key)
+
+	if shSerialization == nil {
+		return false, 0
+	}
+
+	shObj := simhash.Deserialize(shSerialization)
+
+	return true, shObj.Compare(string1, string2)
+}
+
 // dodati rate limiting/token bucket

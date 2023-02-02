@@ -23,7 +23,7 @@ func getWeightMap(tokens []string) map[string]int {
 		_, check := weightMap[token]
 
 		if !check {
-			weightMap[token] = 0
+			weightMap[token] = 1
 		} else {
 			weightMap[token]++
 		}

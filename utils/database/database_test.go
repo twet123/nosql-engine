@@ -1,9 +1,11 @@
 package database
 
 import (
+	"fmt"
 	"math/rand"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -61,7 +63,9 @@ func TestDatabase(t *testing.T) {
 	}
 
 	// testing db HLL
-	db.NewHLL("myHLL", 6)
+	if !db.NewHLL("myHLL", 6) {
+		t.Fatalf("New HLL failed")
+	}
 
 	for i := 0; i < elementsCnt; i++ {
 		if !db.HLLAdd("myHLL", randomStr[i]) {
@@ -76,7 +80,9 @@ func TestDatabase(t *testing.T) {
 	}
 
 	// testing db CMS
-	db.NewCMS("myCMS", 0.1, 0.01)
+	if !db.NewCMS("myCMS", 0.1, 0.01) {
+		t.Fatalf("New CMS failed")
+	}
 
 	for i := 0; i < elementsCnt; i++ {
 		if !db.CMSAdd("myCMS", randomStr[i]) {
@@ -93,7 +99,9 @@ func TestDatabase(t *testing.T) {
 	}
 
 	// testing db BloomFilter
-	db.NewBF("myBF", elementsCnt, 0.01)
+	if !db.NewBF("myBF", elementsCnt, 0.01) {
+		t.Fatalf("New BloomFilter failed")
+	}
 
 	for i := 0; i < elementsCnt; i++ {
 		if !db.BFAdd("myBF", randomStr[i]) {
@@ -105,6 +113,18 @@ func TestDatabase(t *testing.T) {
 		if !db.BFFind("myBF", randomStr[i]) {
 			t.Fatalf("Database BloomFilter find failed")
 		}
+	}
+
+	// testing db SimHash
+	if !db.NewSH("mySH", 8) {
+		t.Fatalf("New SimHash failed")
+	}
+
+	succ, shRes := db.SHCompare("mySH", strings.Join(randomStr[0:50], " "), strings.Join(randomStr[50:], " "))
+
+	fmt.Println(shRes)
+	if !succ || shRes <= 0 {
+		t.Fatalf("Database SimHash failed, impossible result")
 	}
 
 	os.RemoveAll("./data")
