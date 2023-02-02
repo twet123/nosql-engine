@@ -16,6 +16,7 @@ type Config struct {
 	SummaryCount      uint64 `yaml:"summary_count"`
 	CacheSize         uint64 `yaml:"cache_size"`
 	LsmLevels         uint64 `yaml:"lsm_levels"`
+	SSTableFiles      string `yaml:"sstable_files"`
 }
 
 func GetConfig() *Config {
@@ -32,6 +33,7 @@ func GetConfig() *Config {
 		config.SummaryCount = 3
 		config.CacheSize = 10
 		config.LsmLevels = 4
+		config.SSTableFiles = "many"
 	} else {
 		yaml.Unmarshal(configData, &config)
 	}

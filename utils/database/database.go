@@ -23,14 +23,14 @@ func New() *Database {
 	if config.MemtableStructure == "btree" {
 		return &Database{
 			config:   *config,
-			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.BTreeMax, config.BTreeMin, int(config.SummaryCount)),
+			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.BTreeMax, config.BTreeMin, int(config.SummaryCount), config.SSTableFiles),
 			wal:      *wal.New("data/wal/", uint32(config.WalSegmentSize), 0),
 			cache:    cache.New(int(config.CacheSize)),
 		}
 	} else {
 		return &Database{
 			config:   *config,
-			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.SkipListLevels, 0, int(config.SummaryCount)),
+			memtable: *memtable.New(int(config.MemtableSize), config.MemtableStructure, config.SkipListLevels, 0, int(config.SummaryCount), config.SSTableFiles),
 			wal:      *wal.New("data/wal/", uint32(config.WalSegmentSize), 0),
 			cache:    cache.New(int(config.CacheSize)),
 		}
@@ -97,7 +97,7 @@ func (db *Database) Get(key string) []byte {
 		}
 	}
 
-	found, elem := sstable.Find(key, "data/usertables", db.config.LsmLevels)
+	found, elem := sstable.Find(key, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles)
 
 	if found {
 		db.cache.Refer(key, *elem)
@@ -113,3 +113,5 @@ func (db *Database) Get(key string) []byte {
 }
 
 // treba dodati citanje iz wala i rekonstrukciju memtable-a
+// dodati tipove
+// dodati rate limiting/token bucket

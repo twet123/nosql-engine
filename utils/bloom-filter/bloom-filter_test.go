@@ -37,8 +37,8 @@ func TestBloomFilter(t *testing.T) {
 	path := "../../data/filter/"
 	filename := "testFilter.bin"
 
-	bloomFiler.MakeFile(path, filename)
-	bloomFiler = NewFromFile(path + filename)
+	bloomFiler.MakeFile(path, filename, "many")
+	bloomFiler = NewFromFile(path+filename, 0)
 
 	for i := 0; i < elementsCnt; i++ {
 		if !bloomFiler.Find(randomStr[i]) {
