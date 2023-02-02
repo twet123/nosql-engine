@@ -1,6 +1,7 @@
 package simhash
 
 import (
+	"encoding/binary"
 	"nosql-engine/packages/utils/hash"
 	"strings"
 )
@@ -94,4 +95,17 @@ func (sh *SimHash) Compare(data1 string, data2 string) uint {
 	fingerprint2 := sh.getFingerprint(tokens2, weights2)
 
 	return sh.hammingDistance(fingerprint1, fingerprint2)
+}
+
+func (sh *SimHash) Serialize() []byte {
+	ret := make([]byte, 0)
+
+	// return serialized value of bits
+	return binary.BigEndian.AppendUint32(ret, uint32(sh.bits))
+}
+
+func Deserialize(byteArr []byte) *SimHash {
+	return &SimHash{
+		bits: uint(binary.BigEndian.Uint32(byteArr)),
+	}
 }
