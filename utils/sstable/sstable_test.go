@@ -43,5 +43,17 @@ func TestFindKey(t *testing.T) {
 		t.Fatalf("find not working")
 	}
 
+	//os.RemoveAll("data/")
+}
+
+func TestPrefixSearch(t *testing.T) {
+	prefix := "data/testTables"
+	pmap := PrefixScan("key", prefix, uint64(1), mode)
+	for i := 0; i < 10; i++ {
+		_, ok := pmap["key"+strconv.Itoa(i)]
+		if !ok {
+			t.Fatalf("Prefix scan failed for key" + strconv.Itoa(i))
+		}
+	}
 	os.RemoveAll("data/")
 }
