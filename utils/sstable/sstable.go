@@ -277,6 +277,17 @@ func readFileOffsets(filename string) (uint64, uint64, uint64) { //index, summar
 	return readUint64(*readFile), readUint64(*readFile), readUint64(*readFile)
 }
 
+func ReadFileOffset(filename string) uint64 { //index
+	readFile, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer readFile.Close()
+
+	readFile.Seek(-24, os.SEEK_END)
+	return readUint64(*readFile)
+}
+
 func CRC32(data []byte) uint32 {
 	return crc32.ChecksumIEEE(data)
 }
