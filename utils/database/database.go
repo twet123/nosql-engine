@@ -1,6 +1,7 @@
 package database
 
 import (
+	bloomfilter "nosql-engine/packages/utils/bloom-filter"
 	"nosql-engine/packages/utils/cache"
 	"nosql-engine/packages/utils/cms"
 	"nosql-engine/packages/utils/config"
@@ -191,6 +192,37 @@ func (db *Database) CMSCount(key string, keyToCount string) (bool, uint64) {
 	cmsObj := cms.Deserialize(cmsSerialization)
 
 	return true, cmsObj.CountMin(keyToCount)
+}
+
+func (db *Database) NewBF(key string, expectedElements int, falsePositiveRate float64) bool {
+	bfObj := bloomfilter.New(expectedElements, falsePositiveRate)
+
+	return db.Put("bf_"+key, bfObj.Serialize())
+}
+
+func (db *Database) BFAdd(key string, keyToAdd string) bool {
+	bfSerialization := db.Get("bf_" + key)
+
+	if bfSerialization == nil {
+		return false
+	}
+
+	bfObj := bloomfilter.Deserialize(bfSerialization)
+	bfObj.Add(keyToAdd)
+
+	return db.Put("bf_"+key, bfObj.Serialize())
+}
+
+func (db *Database) BFFind(key string, keyToFind string) bool {
+	bfSerialization := db.Get("bf_" + key)
+
+	if bfSerialization == nil {
+		return false
+	}
+
+	bfObj := bloomfilter.Deserialize(bfSerialization)
+
+	return bfObj.Find(keyToFind)
 }
 
 // dodati tipove (serijalizacija gotova)

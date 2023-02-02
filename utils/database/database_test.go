@@ -92,5 +92,20 @@ func TestDatabase(t *testing.T) {
 		}
 	}
 
+	// testing db BloomFilter
+	db.NewBF("myBF", elementsCnt, 0.01)
+
+	for i := 0; i < elementsCnt; i++ {
+		if !db.BFAdd("myBF", randomStr[i]) {
+			t.Fatalf("Database BloomFilter add failed")
+		}
+	}
+
+	for i := 0; i < elementsCnt; i++ {
+		if !db.BFFind("myBF", randomStr[i]) {
+			t.Fatalf("Database BloomFilter find failed")
+		}
+	}
+
 	os.RemoveAll("./data")
 }
