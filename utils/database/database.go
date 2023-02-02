@@ -1,11 +1,14 @@
 package database
 
 import (
+	bloomfilter "nosql-engine/packages/utils/bloom-filter"
 	"nosql-engine/packages/utils/cache"
+	"nosql-engine/packages/utils/cms"
 	"nosql-engine/packages/utils/config"
 	database_elem "nosql-engine/packages/utils/database-elem"
 	"nosql-engine/packages/utils/hll"
 	"nosql-engine/packages/utils/memtable"
+	simhash "nosql-engine/packages/utils/sim-hash"
 	"nosql-engine/packages/utils/sstable"
 	"nosql-engine/packages/utils/wal"
 	"time"
@@ -161,5 +164,84 @@ func (db *Database) HLLEstimate(key string) (bool, float64) {
 	return true, hllObj.Estimate()
 }
 
-// dodati tipove (serijalizacija gotova)
+func (db *Database) NewCMS(key string, precision float64, certainty float64) bool {
+	cmsObj := cms.New(precision, certainty)
+
+	return db.Put("cms_"+key, cmsObj.Serialize())
+}
+
+func (db *Database) CMSAdd(key string, keyToAdd string) bool {
+	cmsSerialization := db.Get("cms_" + key)
+
+	if cmsSerialization == nil {
+		return false
+	}
+
+	cmsObj := cms.Deserialize(cmsSerialization)
+	cmsObj.Add(keyToAdd)
+
+	return db.Put("cms_"+key, cmsObj.Serialize())
+}
+
+func (db *Database) CMSCount(key string, keyToCount string) (bool, uint64) {
+	cmsSerialization := db.Get("cms_" + key)
+
+	if cmsSerialization == nil {
+		return false, 0
+	}
+
+	cmsObj := cms.Deserialize(cmsSerialization)
+
+	return true, cmsObj.CountMin(keyToCount)
+}
+
+func (db *Database) NewBF(key string, expectedElements int, falsePositiveRate float64) bool {
+	bfObj := bloomfilter.New(expectedElements, falsePositiveRate)
+
+	return db.Put("bf_"+key, bfObj.Serialize())
+}
+
+func (db *Database) BFAdd(key string, keyToAdd string) bool {
+	bfSerialization := db.Get("bf_" + key)
+
+	if bfSerialization == nil {
+		return false
+	}
+
+	bfObj := bloomfilter.Deserialize(bfSerialization)
+	bfObj.Add(keyToAdd)
+
+	return db.Put("bf_"+key, bfObj.Serialize())
+}
+
+func (db *Database) BFFind(key string, keyToFind string) bool {
+	bfSerialization := db.Get("bf_" + key)
+
+	if bfSerialization == nil {
+		return false
+	}
+
+	bfObj := bloomfilter.Deserialize(bfSerialization)
+
+	return bfObj.Find(keyToFind)
+}
+
+func (db *Database) NewSH(key string, bits uint) bool {
+	shObj := simhash.New(bits)
+
+	return db.Put("sh_"+key, shObj.Serialize())
+}
+
+func (db *Database) SHCompare(key string, string1 string, string2 string) (bool, uint) {
+	shSerialization := db.Get("sh_" + key)
+
+	if shSerialization == nil {
+		return false, 0
+	}
+
+	shObj := simhash.Deserialize(shSerialization)
+
+	return true, shObj.Compare(string1, string2)
+}
+
 // dodati rate limiting/token bucket
