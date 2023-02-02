@@ -52,4 +52,5 @@ func TestPrefixSearch(t *testing.T) {
 			t.Fatalf("Prefix scan failed for key" + strconv.Itoa(i))
 		}
 	}
+	os.RemoveAll("data/")
 }
