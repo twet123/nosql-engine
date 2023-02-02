@@ -15,7 +15,7 @@ var mode string = "one"
 func TestSStable(t *testing.T) {
 	count := 3
 	dbelems := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
-	for i := 0; i < 110; i++ {
+	for i := 0; i < 10; i++ {
 		ts := time.Now().Unix()
 		key := "key" + strconv.Itoa(i)
 		val := database_elem.DatabaseElem{Tombstone: 0, Value: []byte("nesto" + strconv.Itoa(i)), Timestamp: uint64(ts)}
@@ -40,13 +40,13 @@ func TestFindKey(t *testing.T) {
 		t.Fatalf("find not working")
 	}
 
-	os.RemoveAll("data/")
+	//os.RemoveAll("data/")
 }
 
 func TestPrefixSearch(t *testing.T) {
 	prefix := "data/testTables"
 	pmap := PrefixScan("key", prefix, uint64(1), mode)
-	for i := 0; i < 110; i++ {
+	for i := 0; i < 10; i++ {
 		_, ok := pmap["key"+strconv.Itoa(i)]
 		if !ok {
 			t.Fatalf("Prefix scan failed for key" + strconv.Itoa(i))

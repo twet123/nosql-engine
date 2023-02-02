@@ -649,3 +649,38 @@ func checkPrefixIndex(key string, filename string, start uint64, stop uint64) []
 		}
 	}
 }
+
+func ReadFileOffset(filename string) uint64 { //index
+	readFile, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer readFile.Close()
+
+	readFile.Seek(-24, os.SEEK_END)
+	return readUint64(*readFile)
+}
+
+// offset:
+//   - if file mode == "many" -> offset = readFile.seek(0, io.SeekEnd)
+//   - if file mode == "one" -> call function ReadFileOffset(filename) before opening that file
+//
+// readFile - file pointer
+func ReadRecord(readFile *os.File, offset uint64) (string, *database_elem.DatabaseElem) {
+
+	current, _ := readFile.Seek(0, io.SeekCurrent)
+	if current == int64(offset) {
+		return "", nil
+	}
+	crc := readUint32(*readFile)
+	timestamp := readUint64(*readFile)
+	tombstone := readByte(*readFile)
+	key := readKey(*readFile)
+	length := readUint64(*readFile)
+	value := readBytes(*readFile, length)
+	equals := checkCRC(crc, timestamp, tombstone, key, value)
+	if !equals {
+		log.Fatal("crc not match values")
+	}
+	return key, &database_elem.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
+}
