@@ -1,8 +1,7 @@
-package compaction
+package main
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"io/fs"
 	"io/ioutil"
@@ -95,8 +94,6 @@ func MergeCompaction(level int, dirPath string) {
 		}
 
 		tables = levelFilter(files, strconv.Itoa(level))
-		fmt.Println(tables)
-
 	}
 	if level < int(maxLevels)-1 {
 		//nema kompakcije na poslednjem nivou
@@ -136,8 +133,6 @@ func mergeTwoTables(path1, path2 string, logs []GTypes.KeyVal[string, database_e
 	}
 
 	for {
-		fmt.Println("1")
-
 		k, logs = compareLogs(key1, key2, val1, val2, logs)
 
 		//citamo naredne logove
