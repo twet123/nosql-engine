@@ -10,6 +10,7 @@ import (
 	"nosql-engine/packages/utils/memtable"
 	simhash "nosql-engine/packages/utils/sim-hash"
 	"nosql-engine/packages/utils/sstable"
+	tokenbucket "nosql-engine/packages/utils/token-bucket"
 	"nosql-engine/packages/utils/wal"
 	"time"
 )
@@ -129,6 +130,32 @@ func (db *Database) Get(key string) []byte {
 	return nil
 }
 
+func (db *Database) CheckTokens() bool {
+	tbSerialization := db.Get("tb_user0")
+
+	if tbSerialization == nil {
+		tbObj := tokenbucket.New(db.config.ReqPerTime - 1)
+		return db.Put("tb_user0", tbObj.Serialize())
+	}
+
+	tbObj := tokenbucket.Deserialize(tbSerialization)
+
+	var timeOffset uint64
+	timeUnit := db.config.TimeUnit
+
+	if timeUnit == "second" {
+		timeOffset = 1
+	} else if timeUnit == "minute" {
+		timeOffset = 60
+	} else if timeUnit == "day" {
+		timeOffset = 86400
+	} else {
+		return false
+	}
+
+	return tbObj.Check(db.config.ReqPerTime, timeOffset)
+}
+
 func (db *Database) NewHLL(key string, precision uint8) bool {
 	hllObj := hll.New(precision)
 	if hllObj == nil {
@@ -244,4 +271,5 @@ func (db *Database) SHCompare(key string, string1 string, string2 string) (bool,
 	return true, shObj.Compare(string1, string2)
 }
 
-// dodati rate limiting/token bucket
+// dodati rate limiting
+// dodati list i range scan ovde

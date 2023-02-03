@@ -1,56 +1,55 @@
 package tokenbucket
 
-// treba popraviti token bucket ima warninge
+import (
+	"encoding/binary"
+	"time"
+)
 
-// type TokenBucket struct {
-// 	rateLimit          int64
-// 	maxNumOfTokens     uint64
-// 	currentNumOfTokens uint64
-// 	timestamp          int64
-// }
+type TokenBucket struct {
+	tokens      uint64
+	lrTimestamp uint64 // last reset
+}
 
-// func newTokenBucket(rateLimit int64, maxNumOfTokens uint64) *TokenBucket {
-// 	return &TokenBucket{
-// 		rateLimit:          rateLimit,
-// 		maxNumOfTokens:     maxNumOfTokens,
-// 		timestamp:          time.Now().Unix(),
-// 		currentNumOfTokens: uint64(0),
-// 	}
-// }
+func New(tokens uint64) *TokenBucket {
+	return &TokenBucket{
+		tokens:      tokens,
+		lrTimestamp: uint64(time.Now().Unix()),
+	}
+}
 
-// func (tb *TokenBucket) isReqValid() bool {
-// 	now := time.Now().Unix()
-// 	timeDifference := now - tb.timestamp
+func (tb *TokenBucket) Refresh(maxTokens uint64) {
+	tb.tokens = maxTokens
+	tb.lrTimestamp = uint64(time.Now().Unix())
+}
 
-// 	//provjera da li je prosao odredjeni vremenski period
-// 	//koji predstavlja limit
-// 	if timeDifference > tb.rateLimit {
-// 		//ako jeste resetujemo brojac tokena i timestamp postavljamo na now
-// 		tb.currentNumOfTokens = uint64(0)
-// 		tb.timestamp = now
-// 	} else if tb.currentNumOfTokens >= tb.maxNumOfTokens {
-// 		return false
-// 	}
+func (tb *TokenBucket) Check(maxTokens uint64, timeOffset uint64) bool {
+	if tb.tokens > 0 {
+		tb.tokens--
+		return true
+	} else if tb.lrTimestamp+timeOffset <= uint64(time.Now().Unix()) {
+		tb.tokens = maxTokens
+		tb.lrTimestamp = uint64(time.Now().Unix())
+		return true
+	}
 
-// 	tb.currentNumOfTokens++
-// 	return true
+	return false
+}
 
-// }
+func (tb *TokenBucket) Serialize() []byte {
+	ret := make([]byte, 0)
 
-// // niz:  rateLimit-maxNumOfTokens-currentNumOfTokens-timestamp
-// func (tb *TokenBucket) toBytes() []byte {
-// 	retVal := make([]byte, 32)
-// 	binary.LittleEndian.PutUint64(retVal[0:], uint64(tb.rateLimit))
-// 	binary.LittleEndian.PutUint64(retVal[8:], tb.maxNumOfTokens)
-// 	binary.LittleEndian.PutUint64(retVal[16:], tb.currentNumOfTokens)
-// 	binary.LittleEndian.PutUint64(retVal[24:], uint64(tb.timestamp))
-// 	return retVal
-// }
+	binary.BigEndian.AppendUint64(ret, tb.tokens)
+	binary.BigEndian.AppendUint64(ret, tb.lrTimestamp)
 
-// func (tb *TokenBucket) fromBytes(bytes []byte) {
-// 	tb.rateLimit = int64(binary.LittleEndian.Uint64(bytes[0:8]))
-// 	tb.maxNumOfTokens = binary.LittleEndian.Uint64(bytes[8:16])
-// 	tb.currentNumOfTokens = binary.LittleEndian.Uint64(bytes[16:24])
-// 	tb.timestamp = int64(binary.LittleEndian.Uint64(bytes[24:32]))
+	return ret
+}
 
-// }
+func Deserialize(byteArr []byte) *TokenBucket {
+	tokens := binary.BigEndian.Uint64(byteArr[0:8])
+	timestamp := binary.BigEndian.Uint64(byteArr[8:])
+
+	return &TokenBucket{
+		tokens:      tokens,
+		lrTimestamp: timestamp,
+	}
+}
