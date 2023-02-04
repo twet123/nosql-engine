@@ -346,5 +346,4 @@ func (db *Database) SHCompare(key string, string1 string, string2 string) (bool,
 	return true, shObj.Compare(string1, string2)
 }
 
-// dodati testove za rate limiting i preformulisati operacije nad tipovima da budu zahvacene time
 // dodati list i range scan ovde
