@@ -576,10 +576,12 @@ func readTOC(filename, prefix, mode string) map[string]string { //data, index, s
 	return fmap
 }
 
-func PrefixScan(key string, prefix string, levels uint64, mode string) map[string]database_elem.DatabaseElem {
+func PrefixScan(key string, prefix string, levels uint64, mode string, logsPerPage, pageNumber uint64) map[string]database_elem.DatabaseElem {
 	kvMap := make(map[string]database_elem.DatabaseElem)
+	kvRet := make(map[string]database_elem.DatabaseElem)
 	filespath := prefix
 	arrToc := readOrder(prefix, levels)
+	pageNumberCounter := 0
 
 	for _, name := range arrToc {
 		fmap := readTOC(name, filespath, mode)
@@ -595,16 +597,34 @@ func PrefixScan(key string, prefix string, levels uint64, mode string) map[strin
 		offsets := checkPrefixIndex(key, fmap["index"], start, stop)
 		for _, start := range offsets {
 			deleted, dbel, key := readDataWithKey(fmap["data"], start)
-			if deleted {
+			if deleted || isSpecialKey(key) {
 				continue
 			}
 			_, ok := kvMap[key]
 			if !ok {
 				kvMap[key] = dbel
+				kvRet[key] = dbel
+				if len(kvRet) == int(logsPerPage) {
+					if pageNumberCounter < int(pageNumber) {
+						pageNumberCounter++
+						for k := range kvRet {
+							delete(kvRet, k)
+						}
+					} else {
+						if pageNumberCounter == int(pageNumber) {
+							return kvRet
+						}
+					}
+				}
 			}
 		}
 	}
-	return kvMap
+	if pageNumberCounter < int(pageNumber) {
+		for k := range kvRet {
+			delete(kvRet, k)
+		}
+	}
+	return kvRet
 }
 
 func checkPrefixSummary(key string, filename string, fileOffset uint64) (bool, uint64, uint64) { //returns range of index bytes where key may be
@@ -661,8 +681,10 @@ func checkPrefixIndex(key string, filename string, start uint64, stop uint64) []
 	}
 }
 
-func RangeScan(key1, key2, prefix string, levels uint64, mode string) map[string]database_elem.DatabaseElem {
+func RangeScan(key1, key2, prefix string, levels uint64, mode string, logsPerPage, pageNumber uint64) map[string]database_elem.DatabaseElem {
 	kvMap := make(map[string]database_elem.DatabaseElem)
+	kvRet := make(map[string]database_elem.DatabaseElem)
+	pageNumberCounter := 0
 
 	if key1 > key2 {
 		return kvMap
@@ -685,16 +707,33 @@ func RangeScan(key1, key2, prefix string, levels uint64, mode string) map[string
 		offsets := checkRangeIndex(key1, key2, fmap["index"], start, stop)
 		for _, start := range offsets {
 			deleted, dbel, key := readDataWithKey(fmap["data"], start)
-			if deleted {
+			if deleted || isSpecialKey(key) {
 				continue
 			}
 			_, ok := kvMap[key]
 			if !ok {
 				kvMap[key] = dbel
+				kvRet[key] = dbel
+				if len(kvRet) == int(logsPerPage) {
+					if pageNumberCounter < int(pageNumber) {
+						pageNumberCounter++
+						for k := range kvRet {
+							delete(kvRet, k)
+						}
+					}
+					if pageNumberCounter == int(pageNumber) {
+						return kvRet
+					}
+				}
 			}
 		}
 	}
-	return kvMap
+	if pageNumberCounter < int(pageNumber) {
+		for k := range kvRet {
+			delete(kvRet, k)
+		}
+	}
+	return kvRet
 }
 
 func checkRangeSummary(key1, key2, filename string, fileOffset uint64) (bool, uint64, uint64) { //returns range of index bytes where key may be
@@ -779,4 +818,20 @@ func ReadRecord(readFile *os.File, offset uint64) (string, *database_elem.Databa
 		log.Fatal("crc not match values")
 	}
 	return key, &database_elem.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
+}
+
+func isSpecialKey(key string) bool {
+	specials := make([]string, 5)
+	specials[0] = "bf_"
+	specials[1] = "cms_"
+	specials[2] = "tb_"
+	specials[3] = "hll_"
+	specials[4] = "sh_"
+
+	for _, spec := range specials {
+		if strings.HasPrefix(key, spec) {
+			return true
+		}
+	}
+	return false
 }
