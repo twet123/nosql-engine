@@ -56,6 +56,14 @@ func New() *Database {
 }
 
 func (db *Database) Put(key string, value []byte) bool {
+	if !db.CheckTokens() {
+		return false
+	}
+
+	return db.put(key, value)
+}
+
+func (db *Database) put(key string, value []byte) bool {
 	dbElem := &database_elem.DatabaseElem{
 		Value:     value,
 		Tombstone: 0,
@@ -76,6 +84,14 @@ func (db *Database) Put(key string, value []byte) bool {
 }
 
 func (db *Database) Delete(key string) bool {
+	if !db.CheckTokens() {
+		return false
+	}
+
+	return db.delete(key)
+}
+
+func (db *Database) delete(key string) bool {
 	if db.wal.PutEntry(key, []byte(""), 1) {
 		db.memtable.Delete(key)
 		db.cache.Delete(key)
@@ -90,7 +106,16 @@ func (db *Database) Delete(key string) bool {
 	return false
 }
 
-func (db *Database) Get(key string) []byte {
+// first parameter will return false if the request limit was exceeded
+func (db *Database) Get(key string) (bool, []byte) {
+	if !db.CheckTokens() {
+		return false, nil
+	}
+
+	return true, db.get(key)
+}
+
+func (db *Database) get(key string) []byte {
 	found, keyValue := db.memtable.Find(key)
 
 	if found {
@@ -131,11 +156,11 @@ func (db *Database) Get(key string) []byte {
 }
 
 func (db *Database) CheckTokens() bool {
-	tbSerialization := db.Get("tb_user0")
+	tbSerialization := db.get("tb_user0")
 
 	if tbSerialization == nil {
 		tbObj := tokenbucket.New(db.config.ReqPerTime - 1)
-		return db.Put("tb_user0", tbObj.Serialize())
+		return db.put("tb_user0", tbObj.Serialize())
 	}
 
 	tbObj := tokenbucket.Deserialize(tbSerialization)
@@ -153,20 +178,34 @@ func (db *Database) CheckTokens() bool {
 		return false
 	}
 
-	return tbObj.Check(db.config.ReqPerTime, timeOffset)
+	res := tbObj.Check(db.config.ReqPerTime, timeOffset)
+
+	if !db.put("tb_user0", tbObj.Serialize()) {
+		return false
+	}
+
+	return res
 }
 
 func (db *Database) NewHLL(key string, precision uint8) bool {
+	if !db.CheckTokens() {
+		return false
+	}
+
 	hllObj := hll.New(precision)
 	if hllObj == nil {
 		return false
 	}
 
-	return db.Put("hll_"+key, hllObj.Serialize())
+	return db.put("hll_"+key, hllObj.Serialize())
 }
 
 func (db *Database) HLLAdd(key string, keyToAdd string) bool {
-	hllSerialization := db.Get("hll_" + key)
+	if !db.CheckTokens() {
+		return false
+	}
+
+	hllSerialization := db.get("hll_" + key)
 
 	if hllSerialization == nil {
 		return false
@@ -175,12 +214,16 @@ func (db *Database) HLLAdd(key string, keyToAdd string) bool {
 	hllObj := hll.Deserialize(hllSerialization)
 	hllObj.Add(keyToAdd)
 
-	return db.Put("hll_"+key, hllObj.Serialize())
+	return db.put("hll_"+key, hllObj.Serialize())
 }
 
 // first return value tells if the operation succeeded, the second one is the result
 func (db *Database) HLLEstimate(key string) (bool, float64) {
-	hllSerialization := db.Get("hll_" + key)
+	if !db.CheckTokens() {
+		return false, 0
+	}
+
+	hllSerialization := db.get("hll_" + key)
 
 	if hllSerialization == nil {
 		return false, 0
@@ -192,13 +235,21 @@ func (db *Database) HLLEstimate(key string) (bool, float64) {
 }
 
 func (db *Database) NewCMS(key string, precision float64, certainty float64) bool {
+	if !db.CheckTokens() {
+		return false
+	}
+
 	cmsObj := cms.New(precision, certainty)
 
-	return db.Put("cms_"+key, cmsObj.Serialize())
+	return db.put("cms_"+key, cmsObj.Serialize())
 }
 
 func (db *Database) CMSAdd(key string, keyToAdd string) bool {
-	cmsSerialization := db.Get("cms_" + key)
+	if !db.CheckTokens() {
+		return false
+	}
+
+	cmsSerialization := db.get("cms_" + key)
 
 	if cmsSerialization == nil {
 		return false
@@ -207,11 +258,15 @@ func (db *Database) CMSAdd(key string, keyToAdd string) bool {
 	cmsObj := cms.Deserialize(cmsSerialization)
 	cmsObj.Add(keyToAdd)
 
-	return db.Put("cms_"+key, cmsObj.Serialize())
+	return db.put("cms_"+key, cmsObj.Serialize())
 }
 
 func (db *Database) CMSCount(key string, keyToCount string) (bool, uint64) {
-	cmsSerialization := db.Get("cms_" + key)
+	if !db.CheckTokens() {
+		return false, 0
+	}
+
+	cmsSerialization := db.get("cms_" + key)
 
 	if cmsSerialization == nil {
 		return false, 0
@@ -223,13 +278,21 @@ func (db *Database) CMSCount(key string, keyToCount string) (bool, uint64) {
 }
 
 func (db *Database) NewBF(key string, expectedElements int, falsePositiveRate float64) bool {
+	if !db.CheckTokens() {
+		return false
+	}
+
 	bfObj := bloomfilter.New(expectedElements, falsePositiveRate)
 
-	return db.Put("bf_"+key, bfObj.Serialize())
+	return db.put("bf_"+key, bfObj.Serialize())
 }
 
 func (db *Database) BFAdd(key string, keyToAdd string) bool {
-	bfSerialization := db.Get("bf_" + key)
+	if !db.CheckTokens() {
+		return false
+	}
+
+	bfSerialization := db.get("bf_" + key)
 
 	if bfSerialization == nil {
 		return false
@@ -238,11 +301,15 @@ func (db *Database) BFAdd(key string, keyToAdd string) bool {
 	bfObj := bloomfilter.Deserialize(bfSerialization)
 	bfObj.Add(keyToAdd)
 
-	return db.Put("bf_"+key, bfObj.Serialize())
+	return db.put("bf_"+key, bfObj.Serialize())
 }
 
 func (db *Database) BFFind(key string, keyToFind string) bool {
-	bfSerialization := db.Get("bf_" + key)
+	if !db.CheckTokens() {
+		return false
+	}
+
+	bfSerialization := db.get("bf_" + key)
 
 	if bfSerialization == nil {
 		return false
@@ -254,13 +321,21 @@ func (db *Database) BFFind(key string, keyToFind string) bool {
 }
 
 func (db *Database) NewSH(key string, bits uint) bool {
+	if !db.CheckTokens() {
+		return false
+	}
+
 	shObj := simhash.New(bits)
 
-	return db.Put("sh_"+key, shObj.Serialize())
+	return db.put("sh_"+key, shObj.Serialize())
 }
 
 func (db *Database) SHCompare(key string, string1 string, string2 string) (bool, uint) {
-	shSerialization := db.Get("sh_" + key)
+	if !db.CheckTokens() {
+		return false, 0
+	}
+
+	shSerialization := db.get("sh_" + key)
 
 	if shSerialization == nil {
 		return false, 0
@@ -271,5 +346,5 @@ func (db *Database) SHCompare(key string, string1 string, string2 string) (bool,
 	return true, shObj.Compare(string1, string2)
 }
 
-// dodati rate limiting
+// dodati testove za rate limiting i preformulisati operacije nad tipovima da budu zahvacene time
 // dodati list i range scan ovde

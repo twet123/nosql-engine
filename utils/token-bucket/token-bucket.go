@@ -27,7 +27,7 @@ func (tb *TokenBucket) Check(maxTokens uint64, timeOffset uint64) bool {
 		tb.tokens--
 		return true
 	} else if tb.lrTimestamp+timeOffset <= uint64(time.Now().Unix()) {
-		tb.tokens = maxTokens
+		tb.tokens = maxTokens - 1
 		tb.lrTimestamp = uint64(time.Now().Unix())
 		return true
 	}
@@ -38,8 +38,8 @@ func (tb *TokenBucket) Check(maxTokens uint64, timeOffset uint64) bool {
 func (tb *TokenBucket) Serialize() []byte {
 	ret := make([]byte, 0)
 
-	binary.BigEndian.AppendUint64(ret, tb.tokens)
-	binary.BigEndian.AppendUint64(ret, tb.lrTimestamp)
+	ret = binary.BigEndian.AppendUint64(ret, tb.tokens)
+	ret = binary.BigEndian.AppendUint64(ret, tb.lrTimestamp)
 
 	return ret
 }
