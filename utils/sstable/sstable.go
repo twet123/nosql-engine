@@ -19,6 +19,12 @@ import (
 
 var order = 0
 
+const (
+	SINGLE = 0
+	PREFIX = 1
+	RANGE  = 2
+)
+
 type SSTable struct {
 	data    []GTypes.KeyVal[string, database_elem.DatabaseElem]
 	index   []GTypes.KeyVal[string, uint64]
@@ -476,6 +482,11 @@ func checkIndex(key string, filename string, start uint64, stop uint64) (bool, u
 }
 
 func readData(filename string, offset uint64) (bool, database_elem.DatabaseElem) {
+	b, db, _ := readDataWithKey(filename, offset)
+	return b, db
+}
+
+func readDataWithKey(filename string, offset uint64) (bool, database_elem.DatabaseElem, string) {
 	readFile, err := os.Open(filename)
 	if err != nil {
 		panic(err)
@@ -496,7 +507,7 @@ func readData(filename string, offset uint64) (bool, database_elem.DatabaseElem)
 	if !equals {
 		log.Fatal("crc not match values")
 	}
-	return tombstone == byte(1), database_elem.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}
+	return tombstone == byte(1), database_elem.DatabaseElem{Tombstone: tombstone, Value: value, Timestamp: timestamp}, key
 }
 
 func readKey(f os.File) string {
@@ -563,6 +574,187 @@ func readTOC(filename, prefix, mode string) map[string]string { //data, index, s
 	}
 
 	return fmap
+}
+
+func PrefixScan(key string, prefix string, levels uint64, mode string) map[string]database_elem.DatabaseElem {
+	kvMap := make(map[string]database_elem.DatabaseElem)
+	filespath := prefix
+	arrToc := readOrder(prefix, levels)
+
+	for _, name := range arrToc {
+		fmap := readTOC(name, filespath, mode)
+		summOffset, _ := uint64(0), uint64(0)
+		if mode == "one" {
+			_, summOffset, _ = readFileOffsets(fmap["data"])
+		}
+
+		found, start, stop := checkPrefixSummary(key, fmap["summary"], summOffset)
+		if !found {
+			continue
+		}
+		offsets := checkPrefixIndex(key, fmap["index"], start, stop)
+		for _, start := range offsets {
+			deleted, dbel, key := readDataWithKey(fmap["data"], start)
+			if deleted {
+				continue
+			}
+			_, ok := kvMap[key]
+			if !ok {
+				kvMap[key] = dbel
+			}
+		}
+	}
+	return kvMap
+}
+
+func checkPrefixSummary(key string, filename string, fileOffset uint64) (bool, uint64, uint64) { //returns range of index bytes where key may be
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	file.Seek(int64(fileOffset), io.SeekStart)
+	start := readKey(*file)
+	stop := readKey(*file)
+	if (key < start && !strings.HasPrefix(start, key)) || key > stop {
+		return false, 0, 0
+	}
+	prevoffset := uint64(0)
+	firstIter := true
+	for {
+		filekey := readKey(*file)
+		offset := readUint64(*file)
+		if firstIter {
+			firstIter = false
+			prevoffset = offset
+		}
+
+		if !strings.HasPrefix(filekey, key) && key < filekey {
+			prevoffset = offset
+		}
+		if key > filekey || stop == filekey {
+			return true, prevoffset, offset
+		}
+	}
+}
+
+func checkPrefixIndex(key string, filename string, start uint64, stop uint64) []uint64 {
+	arr := make([]uint64, 0)
+
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	file.Seek(int64(start), io.SeekStart)
+	for {
+		pos, _ := file.Seek(0, io.SeekCurrent)
+		if stop < uint64(pos) {
+			return arr
+		}
+		filekey := readKey(*file)
+		offset := readUint64(*file)
+		if strings.HasPrefix(filekey, key) {
+			arr = append(arr, offset)
+		}
+	}
+}
+
+func RangeScan(key1, key2, prefix string, levels uint64, mode string) map[string]database_elem.DatabaseElem {
+	kvMap := make(map[string]database_elem.DatabaseElem)
+
+	if key1 > key2 {
+		return kvMap
+	}
+
+	filespath := prefix
+	arrToc := readOrder(prefix, levels)
+
+	for _, name := range arrToc {
+		fmap := readTOC(name, filespath, mode)
+		summOffset, _ := uint64(0), uint64(0)
+		if mode == "one" {
+			_, summOffset, _ = readFileOffsets(fmap["data"])
+		}
+
+		found, start, stop := checkRangeSummary(key1, key2, fmap["summary"], summOffset)
+		if !found {
+			continue
+		}
+		offsets := checkRangeIndex(key1, key2, fmap["index"], start, stop)
+		for _, start := range offsets {
+			deleted, dbel, key := readDataWithKey(fmap["data"], start)
+			if deleted {
+				continue
+			}
+			_, ok := kvMap[key]
+			if !ok {
+				kvMap[key] = dbel
+			}
+		}
+	}
+	return kvMap
+}
+
+func checkRangeSummary(key1, key2, filename string, fileOffset uint64) (bool, uint64, uint64) { //returns range of index bytes where key may be
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	file.Seek(int64(fileOffset), io.SeekStart)
+	start := readKey(*file)
+	stop := readKey(*file)
+	if start > key2 || stop < key1 {
+		return false, 0, 0
+	}
+	prevoffset := uint64(0)
+	firstIter := true
+	for {
+		filekey := readKey(*file)
+		offset := readUint64(*file)
+		if firstIter {
+			firstIter = false
+			prevoffset = offset
+		}
+		if filekey < key1 {
+			prevoffset = offset
+		}
+		if filekey > key2 || stop == filekey {
+			return true, prevoffset, offset
+		}
+	}
+}
+
+func checkRangeIndex(key1, key2, filename string, start uint64, stop uint64) []uint64 {
+	arr := make([]uint64, 0)
+
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	file.Seek(int64(start), io.SeekStart)
+	for {
+		pos, _ := file.Seek(0, io.SeekCurrent)
+		if stop < uint64(pos) {
+			return arr
+		}
+		filekey := readKey(*file)
+		offset := readUint64(*file)
+		if isInRange(filekey, key1, key2) {
+			arr = append(arr, offset)
+		}
+	}
+}
+
+func isInRange(key, key1, key2 string) bool {
+	if key1 <= key && key <= key2 {
+		return true
+	}
+	return false
 }
 
 // offset:

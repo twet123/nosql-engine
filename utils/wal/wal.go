@@ -54,12 +54,12 @@ type WAL struct {
 }
 type WALEntry struct {
 	CRC       uint32
-	timestamp uint64
-	tombstone byte
+	Timestamp uint64
+	Tombstone byte
 	keySize   uint64
 	valueSize uint64
-	key       string
-	value     []byte
+	Key       string
+	Value     []byte
 }
 
 // /////////////////////////////////////////////////
@@ -79,10 +79,10 @@ func (entry *WALEntry) encode() []byte {
 	binary.LittleEndian.PutUint32(crc32, entry.CRC)
 
 	timestamp := make([]byte, TIMESTAMP_SIZE)
-	binary.LittleEndian.PutUint64(timestamp, entry.timestamp)
+	binary.LittleEndian.PutUint64(timestamp, entry.Timestamp)
 
 	tombstone := []byte{0}
-	if entry.tombstone == 1 {
+	if entry.Tombstone == 1 {
 		tombstone[0] = 1
 	}
 
@@ -98,8 +98,8 @@ func (entry *WALEntry) encode() []byte {
 	recordList = append(recordList, tombstone...)
 	recordList = append(recordList, keySize...)
 	recordList = append(recordList, valueSize...)
-	recordList = append(recordList, []byte(entry.key)...)
-	recordList = append(recordList, entry.value...)
+	recordList = append(recordList, []byte(entry.Key)...)
+	recordList = append(recordList, entry.Value...)
 
 	return recordList
 }
@@ -111,12 +111,12 @@ func decode(reader *bufio.Reader) (WALEntry, error) {
 		return entry, err
 	}
 
-	err = binary.Read(reader, binary.LittleEndian, &entry.timestamp)
+	err = binary.Read(reader, binary.LittleEndian, &entry.Timestamp)
 	if err != nil {
 		return entry, err
 	}
 
-	err = binary.Read(reader, binary.LittleEndian, &entry.tombstone)
+	err = binary.Read(reader, binary.LittleEndian, &entry.Tombstone)
 	if err != nil {
 		return entry, err
 	}
@@ -137,14 +137,14 @@ func decode(reader *bufio.Reader) (WALEntry, error) {
 		return entry, err
 	}
 
-	entry.key = string(key)
+	entry.Key = string(key)
 
 	value := make([]byte, entry.valueSize)
 	err = binary.Read(reader, binary.LittleEndian, &value)
 	if err != nil {
 		return entry, err
 	}
-	entry.value = value
+	entry.Value = value
 
 	return entry, nil
 
@@ -278,7 +278,7 @@ func (w *WAL) EmptyWAL() {
 }
 
 // vraca listu logova procitanih sa diska (na pocetku liste najstariji logovi)
-func (w *WAL) readAllEntries() []WALEntry {
+func (w *WAL) ReadAllEntries() []WALEntry {
 
 	entries := make([]WALEntry, 0)
 

@@ -18,6 +18,8 @@ type Config struct {
 	LsmLevels         uint64 `yaml:"lsm_levels"`
 	SSTableFiles      string `yaml:"sstable_files"`
 	LsmMaxPerLevel    uint64 `yaml:"lsm_max_per_level"`
+	ReqPerTime        uint64 `yaml:"req_per_time"`
+	TimeUnit          string `yaml:"time_unit"` // possible values "second", "minute", "day"
 }
 
 func GetConfig() *Config {
@@ -36,6 +38,8 @@ func GetConfig() *Config {
 		config.LsmLevels = 4
 		config.SSTableFiles = "many"
 		config.LsmMaxPerLevel = 5
+		config.ReqPerTime = 60
+		config.TimeUnit = "minute"
 	} else {
 		yaml.Unmarshal(configData, &config)
 	}
