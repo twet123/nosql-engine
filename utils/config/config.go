@@ -17,6 +17,8 @@ type Config struct {
 	CacheSize         uint64 `yaml:"cache_size"`
 	LsmLevels         uint64 `yaml:"lsm_levels"`
 	SSTableFiles      string `yaml:"sstable_files"`
+	ReqPerTime        uint64 `yaml:"req_per_time"`
+	TimeUnit          string `yaml:"time_unit"` // possible values "second", "minute", "day"
 }
 
 func GetConfig() *Config {
@@ -34,6 +36,8 @@ func GetConfig() *Config {
 		config.CacheSize = 10
 		config.LsmLevels = 4
 		config.SSTableFiles = "many"
+		config.ReqPerTime = 60
+		config.TimeUnit = "minute"
 	} else {
 		yaml.Unmarshal(configData, &config)
 	}

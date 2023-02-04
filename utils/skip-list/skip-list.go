@@ -80,6 +80,7 @@ func (s *SkipList) Add(key string, elem database_elem.DatabaseElem) bool {
 	oldElem := s.Find(key)
 	if oldElem != nil {
 		oldElem.value = elem.Value
+		oldElem.tombstone = elem.Tombstone
 		oldElem.timestamp = uint64(time.Now().Unix())
 
 		return false

@@ -46,4 +46,11 @@ func TestSimHash(t *testing.T) {
 	if result <= 0 {
 		t.Fatalf("Impossible result, 32 bits")
 	}
+
+	serialization := simHash.Serialize()
+	simHash = Deserialize(serialization)
+
+	if result != simHash.Compare(file1, file2) {
+		t.Fatalf("SimHash failed after deserialization")
+	}
 }
