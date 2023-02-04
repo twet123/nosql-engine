@@ -172,3 +172,11 @@ func (mt *MemTable) Flush() {
 func (mt *MemTable) CheckFlushed() bool {
 	return mt.capacity == 0
 }
+
+func (mt *MemTable) AllElements() []generic_types.KeyVal[string, database_elem.DatabaseElem] {
+	if mt.structType == "btree" {
+		return mt.tree.SortedSlice()
+	} else {
+		return mt.list.Flush()
+	}
+}
