@@ -56,7 +56,7 @@ func TestFindKey(t *testing.T) {
 
 func TestPrefixSearch(t *testing.T) {
 	prefix := "data/testTables"
-	pmap := PrefixScan("key", prefix, uint64(1), mode, 10, 1000)
+	pmap := PrefixScan("key", prefix, uint64(1), mode, 1000, 0)
 	for i := 0; i < keyNum; i++ {
 		_, ok := pmap["key"+strconv.Itoa(i)]
 		if !ok {
