@@ -13,6 +13,12 @@ type MerkleRoot struct {
 func New(bytes [][]byte) *MerkleRoot {
 	fileNum := len(bytes)
 
+	if fileNum == 1 {
+		tempHash := hash(bytes[0])
+		rootNode := Node{data: tempHash[:], left: nil, right: nil}
+		return &MerkleRoot{root: &rootNode}
+	}
+
 	// first level of nodes
 	nodeLevel := make([]Node, fileNum)
 

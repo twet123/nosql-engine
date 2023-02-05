@@ -66,7 +66,7 @@ func GetOp(max int) int {
 			continue
 		}
 		if op < 1 || op > max {
-			fmt.Println("Please insert again")
+			fmt.Print("Please insert again: ")
 			continue
 		}
 		return op
@@ -89,10 +89,12 @@ func GetValue() []byte {
 func GetUint64() uint64 {
 	for {
 		var precision uint64
-		_, err := fmt.Scanf("%d", precision)
+		_, err := fmt.Scanf("%d", &precision)
 		fmt.Scanln()
 		if err != nil {
-			fmt.Println("Please insert correct value")
+			fmt.Println(err)
+			fmt.Print("Please insert correct value: ")
+			continue
 		}
 		return precision
 	}
@@ -102,10 +104,12 @@ func GetFloat64() float64 {
 	for {
 		var precision float64
 
-		_, err := fmt.Scanf("%f", precision)
+		_, err := fmt.Scanf("%g", &precision)
 		fmt.Scanln()
 		if err != nil {
-			fmt.Println("Please insert correct value")
+			fmt.Println(err)
+			fmt.Print("Please insert correct value: ")
+			continue
 		}
 		return precision
 	}
@@ -150,7 +154,7 @@ func GetOperation(db *database.Database) []byte {
 
 func NewHLLOperation(db *database.Database) {
 	key := GetKey()
-	fmt.Print("Precision: ")
+	fmt.Print("Precision (uint8): ")
 	precision := GetUint64()
 
 	ok := db.NewHLL(key, uint8(precision))

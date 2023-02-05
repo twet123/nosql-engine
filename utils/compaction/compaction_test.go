@@ -4,7 +4,6 @@ import (
 	database_elem "nosql-engine/packages/utils/database-elem"
 	GTypes "nosql-engine/packages/utils/generic-types"
 	SSTable "nosql-engine/packages/utils/sstable"
-	"os"
 	"sort"
 	"strconv"
 	"testing"
@@ -12,19 +11,19 @@ import (
 )
 
 var mode string = "one"
-var keyNum int = 100
+var keyNum int = 10000
 var count int = 3
 
-func createElements1() []GTypes.KeyVal[string, database_elem.DatabaseElem] {
+func createElements1(from, to int) []GTypes.KeyVal[string, database_elem.DatabaseElem] {
 	dbelems := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
 	keys := make([]string, 0)
-	for i := 0; i < keyNum; i++ {
+	for i := from; i < to; i++ {
 		key := "key A" + strconv.Itoa(i)
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 
-	for i := 0; i < keyNum; i++ {
+	for i := 0; i < to-from; i++ {
 		ts := time.Now().Unix()
 		key := keys[i]
 		val := database_elem.DatabaseElem{Tombstone: 0, Value: []byte("nesto" + strconv.Itoa(i)), Timestamp: uint64(ts)}
@@ -33,58 +32,18 @@ func createElements1() []GTypes.KeyVal[string, database_elem.DatabaseElem] {
 	return dbelems
 }
 
-func TestMergeCompaction(t *testing.T) {
-	dbelems := createElements1()
-
-	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, err := os.Open("data/testTables/usertable-L0-1-Data.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = file.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, _ = os.Open("data/testTables/usertable-L0-1-Data.db")
-	_ = file.Close()
-
-	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, _ = os.Open("data/testTables/usertable-L0-1-Data.db")
-	_ = file.Close()
-
-	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, _ = os.Open("data/testTables/usertable-L0-1-Data.db")
-	_ = file.Close()
-
-	MergeCompaction(0, "data/testTables")
-}
-
 func TestLeveledCompaction(t *testing.T) {
-	dbelems := createElements1()
 
+	dbelems := createElements1(0, 100)
 	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, err := os.Open("data/testTables/usertable-L0-1-Data.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = file.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	dbelems = createElements1(50, 150)
 	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, _ = os.Open("data/testTables/usertable-L0-1-Data.db")
-	_ = file.Close()
-
+	dbelems = createElements1(20, 70)
 	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, _ = os.Open("data/testTables/usertable-L0-1-Data.db")
-	_ = file.Close()
-
+	dbelems = createElements1(200, 290)
 	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
-	file, _ = os.Open("data/testTables/usertable-L0-1-Data.db")
-	_ = file.Close()
+	dbelems = createElements1(200, 400)
+	SSTable.CreateSStable(dbelems, count, "data/testTables", 0, mode)
 
 	LeveledCompaction(0, "data/testTables")
 }

@@ -27,17 +27,17 @@ const (
 )
 
 type SSTable struct {
-	data    []GTypes.KeyVal[string, database_elem.DatabaseElem]
-	index   []GTypes.KeyVal[string, uint64]
-	summary Summary
-	bf      bloomfilter.BloomFilter
+	Data    []GTypes.KeyVal[string, database_elem.DatabaseElem]
+	Index   []GTypes.KeyVal[string, uint64]
+	Summary Summary
+	Bf      bloomfilter.BloomFilter
 	TOC     string
 }
 
 type Summary struct {
-	start   string
-	stop    string
-	indexes []GTypes.KeyVal[string, uint64]
+	Start   string
+	Stop    string
+	Indexes []GTypes.KeyVal[string, uint64]
 }
 
 func new(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int) SSTable {
@@ -56,49 +56,51 @@ func new(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int) S
 		}
 	}
 
-	sum := Summary{start: array[0].Key, stop: array[len(array)-1].Key, indexes: sumIndexes}
+	sum := Summary{Start: array[0].Key, Stop: array[len(array)-1].Key, Indexes: sumIndexes}
 	TOC := ""
-	return SSTable{bf: *bf, data: array, index: index, summary: sum, TOC: TOC}
+	return SSTable{Bf: *bf, Data: array, Index: index, Summary: sum, TOC: TOC}
 }
 
 func CreateSStable(array []GTypes.KeyVal[string, database_elem.DatabaseElem], count int, prefix string, level int, mode string) {
-	defineOrder(prefix, level)
+	DefineOrder(prefix, level)
 
 	st := new(array, count)
 	for offset, element := range array {
 		key := element.Key
 
-		st.index = append(st.index, GTypes.KeyVal[string, uint64]{Key: key, Value: uint64(offset)})
-		st.bf.Add(string(key))
+		st.Index = append(st.Index, GTypes.KeyVal[string, uint64]{Key: key, Value: uint64(offset)})
+		st.Bf.Add(string(key))
 	}
-	createFiles(st, prefix, level, mode)
+	CreateFiles(st, prefix, level, mode, false)
 }
 
-func createFiles(st SSTable, prefix string, level int, mode string) {
+func CreateFiles(st SSTable, prefix string, level int, mode string, dataExists bool) {
 	name := "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(order) + "-"
 
 	if mode == "many" {
-		st.bf.MakeFile(prefix, name+"Filter.db", mode)
+		st.Bf.MakeFile(prefix, name+"Filter.db", mode)
 	}
 
 	nameWithoutPrefix := name
 	name = prefix + name
-	arr := createDataFile(name, st)
+	if !dataExists {
+		arr := createDataFile(name, st)
 
-	for i := range st.index {
-		st.index[i].Value = arr[i]
+		for i := range st.Index {
+			st.Index[i].Value = arr[i]
+		}
 	}
 
 	arr, indexOffset := createIndexFile(name, st, mode)
 
-	for i := range st.summary.indexes {
-		in := st.summary.indexes[i].Value
-		st.summary.indexes[i].Value = arr[in] + indexOffset
+	for i := range st.Summary.Indexes {
+		in := st.Summary.Indexes[i].Value
+		st.Summary.Indexes[i].Value = arr[in] + indexOffset
 	}
 	summOffset := createSummaryFile(name, st, mode)
 	var bfOffset uint64
 	if mode == "one" {
-		bfOffset = st.bf.MakeFile(prefix, nameWithoutPrefix+"Data.db", mode)
+		bfOffset = st.Bf.MakeFile(prefix, nameWithoutPrefix+"Data.db", mode)
 		appendFileOffsets(name, indexOffset, summOffset, bfOffset)
 	}
 	createTOCFile(name, mode)
@@ -111,7 +113,7 @@ func createDataFile(name string, st SSTable) []uint64 {
 	}
 	offsetstart := make([]uint64, 0)
 	mtdata := make([][]byte, 0)
-	for _, element := range st.data {
+	for _, element := range st.Data {
 		byteslice := make([]byte, 0)
 		tmpbs := make([]byte, 8)
 
@@ -145,7 +147,7 @@ func createDataFile(name string, st SSTable) []uint64 {
 		file.Write(byteslice)
 	}
 	file.Close()
-	createMerkleFile(name, mtdata)
+	CreateMerkleFile(name, mtdata)
 	return offsetstart
 }
 
@@ -166,7 +168,7 @@ func createIndexFile(name string, st SSTable, mode string) ([]uint64, uint64) {
 	tmpbs := make([]byte, 8)
 
 	sumoffsets := make([]uint64, 0)
-	for _, element := range st.index {
+	for _, element := range st.Index {
 
 		sumoffsets = append(sumoffsets, uint64(len(byteslice)))
 
@@ -200,15 +202,15 @@ func createSummaryFile(name string, st SSTable, mode string) uint64 {
 	byteslice := make([]byte, 0)
 	tmpbs := make([]byte, 8)
 
-	binary.LittleEndian.PutUint64(tmpbs, uint64(len([]byte(st.summary.start))))
+	binary.LittleEndian.PutUint64(tmpbs, uint64(len([]byte(st.Summary.Start))))
 	byteslice = append(byteslice, tmpbs...)
-	byteslice = append(byteslice, []byte(st.summary.start)...)
+	byteslice = append(byteslice, []byte(st.Summary.Start)...)
 
-	binary.LittleEndian.PutUint64(tmpbs, uint64(len([]byte(st.summary.stop))))
+	binary.LittleEndian.PutUint64(tmpbs, uint64(len([]byte(st.Summary.Stop))))
 	byteslice = append(byteslice, tmpbs...)
-	byteslice = append(byteslice, []byte(st.summary.stop)...)
+	byteslice = append(byteslice, []byte(st.Summary.Stop)...)
 
-	for _, element := range st.summary.indexes {
+	for _, element := range st.Summary.Indexes {
 		binary.LittleEndian.PutUint64(tmpbs, uint64(len([]byte(element.Key))))
 		byteslice = append(byteslice, tmpbs...)
 		byteslice = append(byteslice, []byte(element.Key)...)
@@ -220,7 +222,7 @@ func createSummaryFile(name string, st SSTable, mode string) uint64 {
 	return uint64(start)
 }
 
-func createMerkleFile(name string, bytes [][]byte) {
+func CreateMerkleFile(name string, bytes [][]byte) {
 	file, err := os.Create(name + "Metadata.db")
 	if err != nil {
 		panic(err)
@@ -293,7 +295,7 @@ func CRC32(data []byte) uint32 {
 	return crc32.ChecksumIEEE(data)
 }
 
-func defineOrder(prefix string, level int) {
+func DefineOrder(prefix string, level int) {
 	files, err := os.ReadDir("./" + prefix)
 	if os.IsNotExist(err) {
 		os.MkdirAll(prefix, os.ModePerm)
