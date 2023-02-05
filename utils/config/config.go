@@ -36,8 +36,8 @@ func GetConfig() *Config {
 		config.SummaryCount = 3
 		config.CacheSize = 10
 		config.LsmLevels = 4
-		config.SSTableFiles = "many"
-		config.LsmMaxPerLevel = 5
+		config.SSTableFiles = "one"
+		config.LsmMaxPerLevel = 4
 		config.ReqPerTime = 60
 		config.TimeUnit = "minute"
 	} else {

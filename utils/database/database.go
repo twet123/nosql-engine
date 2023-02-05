@@ -49,6 +49,10 @@ func New() *Database {
 
 		if memtableObj.CheckFlushed() {
 			walObj.EmptyWAL()
+			for i := 0; i < int(config.LsmLevels-1); i++ {
+				compaction.DoCompaction(uint64(i), "data/usertables/", config.LsmMaxPerLevel, config.LsmLevels, config.SSTableFiles, int(config.SummaryCount))
+				// compaction.MergeCompaction(i, "data/usertables")
+			}
 		}
 	}
 
@@ -80,8 +84,9 @@ func (db *Database) put(key string, value []byte) bool {
 
 		if db.memtable.CheckFlushed() {
 			db.wal.EmptyWAL()
-			for i := 0; i < int(db.config.LsmLevels); i++ {
-				compaction.MergeCompaction(i, "data/usertables")
+			for i := 0; i < int(db.config.LsmLevels-1); i++ {
+				compaction.DoCompaction(uint64(i), "data/usertables/", db.config.LsmMaxPerLevel, db.config.LsmLevels, db.config.SSTableFiles, int(db.config.SummaryCount))
+				// compaction.MergeCompaction(i, "data/usertables")
 			}
 		}
 
@@ -106,8 +111,9 @@ func (db *Database) delete(key string) bool {
 
 		if db.memtable.CheckFlushed() {
 			db.wal.EmptyWAL()
-			for i := 0; i < int(db.config.LsmLevels); i++ {
-				compaction.MergeCompaction(i, "data/usertables")
+			for i := 0; i < int(db.config.LsmLevels-1); i++ {
+				compaction.DoCompaction(uint64(i), "data/usertables/", db.config.LsmMaxPerLevel, db.config.LsmLevels, db.config.SSTableFiles, int(db.config.SummaryCount))
+				// compaction.MergeCompaction(i, "data/usertables")
 			}
 		}
 
