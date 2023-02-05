@@ -103,14 +103,14 @@ func NewHLLOperation(db *database.Database) {
 	key := GetKey()
 	var precision uint8
 	fmt.Print("Precision: ")
+	fmt.Scan("%d", precision)
 
-	ok := db.NewHLL(key)
+	ok := db.NewHLL(key, precision)
 	if !ok {
 		fmt.Println("NEW HLL failed for key " + key)
 	} else {
 		fmt.Println("OK")
 	}
-	return value
 }
 
 func HLLAddOperation(db *database.Database) {
@@ -142,7 +142,11 @@ func HLLEstimateOperation(db *database.Database) float64 {
 
 func main() {
 	db := database.New()
+	br := false
 	for {
+		if br {
+			break
+		}
 		Menu()
 		op := GetOp(8)
 
@@ -154,7 +158,8 @@ func main() {
 		case 3:
 			_ = GetOperation(db)
 		case 4:
-
+		case 8:
+			br = true
 		}
 	}
 
