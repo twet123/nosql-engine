@@ -82,8 +82,11 @@ func GetKey() string {
 }
 
 func GetValue() []byte {
-	value := make([]byte, 0)
-	return value
+	var value string
+
+	fmt.Print("Value: ")
+	fmt.Scanln(&value)
+	return []byte(value)
 }
 
 func GetUint64() uint64 {
@@ -106,11 +109,12 @@ func GetFloat64() float64 {
 
 		_, err := fmt.Scanf("%g", &precision)
 		fmt.Scanln()
-		if err != nil {
+		if err != nil || (precision > 1 || precision < -1) {
 			fmt.Println(err)
 			fmt.Print("Please insert correct value: ")
 			continue
 		}
+
 		return precision
 	}
 }
@@ -198,10 +202,10 @@ func HLLEstimateOperation(db *database.Database) float64 {
 func NewCMSOperation(db *database.Database) {
 	key := GetKey()
 
-	fmt.Print("Precision: ")
+	fmt.Print("Precision (float): ")
 	precision := GetFloat64()
 
-	fmt.Print("Certainty: ")
+	fmt.Print("Certainty (float): ")
 	certainty := GetFloat64()
 
 	ok := db.NewCMS(key, precision, certainty)
@@ -252,6 +256,7 @@ func NewBFOperation(db *database.Database) {
 	fmt.Print("Expected number of elements: ")
 	expel := GetUint64()
 
+	fmt.Print("False positive rate (float): ")
 	fprate := GetFloat64()
 
 	ok := db.NewBF(key, int(expel), fprate)
