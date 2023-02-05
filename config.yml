@@ -1,8 +1,8 @@
 wal_segment_size: 20
 memtable_size: 20
 memtable_structure: skiplist
-btree_min: 2
-btree_max: 4
+btree_min: 3
+btree_max: 5
 skiplist_levels: 32
 summary_count: 3
 cache_size: 10
