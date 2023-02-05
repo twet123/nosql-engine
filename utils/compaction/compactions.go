@@ -47,14 +47,11 @@ func getDataFileOrderNum(filename string) int {
 // provjera da li je potrebna kompakcija datog nivoa
 func NeedsCompaction(level int, files []fs.FileInfo, maxPerLevel uint64) bool {
 	tables := levelFilter(files, strconv.Itoa(level))
-	if len(tables) > int(maxPerLevel) {
-		return true
-	}
-	return false
+
+	return len(tables) > int(maxPerLevel)
 }
 
 func MergeCompaction(level int, dirPath string) {
-
 	config := config2.GetConfig()
 	count := config.SummaryCount
 	maxPerLevel := config.LsmMaxPerLevel
@@ -204,13 +201,11 @@ func compareLogs(key1, key2 string, val1, val2 *database_elem.DatabaseElem, logs
 			return 0, logs
 		}
 	}
-	return 0, logs
 }
 
 // brise fajlove stare sstabele
 func deleteOldFiles(prefix, table string, level int) {
-	var orderNum int
-	orderNum = getDataFileOrderNum(table)
+	orderNum := getDataFileOrderNum(table)
 	name := prefix + "/usertable-L" + strconv.Itoa(level) + "-" + strconv.Itoa(orderNum) + "-TOC.txt"
 	tocFile, err := os.Open(name)
 	if err != nil {

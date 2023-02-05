@@ -63,8 +63,8 @@ func TestDatabase(t *testing.T) {
 	}
 
 	// for testing purposes
-	// testing DB types, putting requests per minute to 600
-	db.config.ReqPerTime = 600
+	// testing DB types, putting requests per minute to 800
+	db.config.ReqPerTime = 800
 
 	// testing db HLL
 	if !db.NewHLL("myHLL", 6) {
@@ -131,6 +131,33 @@ func TestDatabase(t *testing.T) {
 	}
 
 	fmt.Println("Database SimHash result:", shRes)
+
+	// testing db list
+	// element were deleted previously, so adding them back
+	for i := 0; i < elementsCnt; i++ {
+		db.Put(randomStr[i], []byte(randomStr[i]))
+	}
+
+	listRes := db.List(randomStr[0][0:2], 100, 0)
+
+	fmt.Println("List for", randomStr[0][0:2])
+	for _, res := range listRes {
+		fmt.Println(string(res))
+		if !strings.HasPrefix(string(res), randomStr[0][0:2]) {
+			t.Fatal("Database list failed, returned a string without given prefix")
+		}
+	}
+
+	// testing db range scan
+	rangeRes := db.RangeScan(randomStr[0], randomStr[elementsCnt-1], 100, 0)
+
+	fmt.Println("Ragne for", randomStr[0], "-", randomStr[elementsCnt-1])
+	for _, res := range rangeRes {
+		fmt.Println(string(res))
+		if !(string(res) >= randomStr[0] && string(res) <= randomStr[elementsCnt-1]) {
+			t.Fatal("Database range scan failed, returned a string without given prefix")
+		}
+	}
 
 	// testing for rate limiting
 	db.delete("tb_user0")

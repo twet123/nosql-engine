@@ -4,6 +4,7 @@ import (
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
 	"nosql-engine/packages/utils/cache"
 	"nosql-engine/packages/utils/cms"
+	"nosql-engine/packages/utils/compaction"
 	"nosql-engine/packages/utils/config"
 	database_elem "nosql-engine/packages/utils/database-elem"
 	generic_types "nosql-engine/packages/utils/generic-types"
@@ -78,6 +79,9 @@ func (db *Database) put(key string, value []byte) bool {
 
 		if db.memtable.CheckFlushed() {
 			db.wal.EmptyWAL()
+			for i := 0; i < int(db.config.LsmLevels); i++ {
+				compaction.MergeCompaction(i, "data/usertables")
+			}
 		}
 
 		return true
@@ -101,6 +105,9 @@ func (db *Database) delete(key string) bool {
 
 		if db.memtable.CheckFlushed() {
 			db.wal.EmptyWAL()
+			for i := 0; i < int(db.config.LsmLevels); i++ {
+				compaction.MergeCompaction(i, "data/usertables")
+			}
 		}
 
 		return true
@@ -356,21 +363,25 @@ func (db *Database) List(prefix string, pageSize uint64, page uint64) [][]byte {
 
 	retMap := sstable.PrefixScan(prefix, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles, pageSize, page)
 	memtableEntries := db.memtable.AllElements()
-	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], pageSize)
+	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
 
-	i := 0
 	for key, elem := range retMap {
-		retPairs[i].Key = key
-		retPairs[i].Value = elem
-		i++
+		if key == "" {
+			continue
+		}
+		retPairs = append(retPairs, generic_types.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: elem})
 	}
+
+	sort.Slice(retPairs, func(p, q int) bool {
+		return retPairs[p].Key < retPairs[q].Key
+	})
 
 	for _, entry := range memtableEntries {
 		if checkReserved(entry.Key) || !strings.HasPrefix(entry.Key, prefix) {
 			continue
 		}
 
-		if entry.Key > retPairs[0].Key && entry.Key < retPairs[len(retPairs)-1].Key {
+		if len(retPairs) < int(pageSize) || (entry.Key > retPairs[0].Key && entry.Key < retPairs[len(retPairs)-1].Key) {
 			retPairs = append(retPairs, entry)
 		}
 	}
@@ -379,10 +390,13 @@ func (db *Database) List(prefix string, pageSize uint64, page uint64) [][]byte {
 		return retPairs[p].Key < retPairs[q].Key
 	})
 
-	retValues := make([][]byte, pageSize)
+	retValues := make([][]byte, 0)
 
-	for i := 0; i < int(pageSize); i++ {
-		retValues[i] = retPairs[i].Value.Value
+	for i, pair := range retPairs {
+		if i == int(pageSize) {
+			break
+		}
+		retValues = append(retValues, pair.Value.Value)
 	}
 
 	return retValues
@@ -395,21 +409,25 @@ func (db *Database) RangeScan(start string, end string, pageSize uint64, page ui
 
 	retMap := sstable.RangeScan(start, end, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles, pageSize, page)
 	memtableEntries := db.memtable.AllElements()
-	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], pageSize)
+	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
 
-	i := 0
 	for key, elem := range retMap {
-		retPairs[i].Key = key
-		retPairs[i].Value = elem
-		i++
+		if key == "" {
+			continue
+		}
+		retPairs = append(retPairs, generic_types.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: elem})
 	}
+
+	sort.Slice(retPairs, func(p, q int) bool {
+		return retPairs[p].Key < retPairs[q].Key
+	})
 
 	for _, entry := range memtableEntries {
 		if checkReserved(entry.Key) || entry.Key < start || entry.Key > end {
 			continue
 		}
 
-		if entry.Key > retPairs[0].Key && entry.Key < retPairs[len(retPairs)-1].Key {
+		if len(retPairs) < int(pageSize) || (entry.Key > retPairs[0].Key && entry.Key < retPairs[len(retPairs)-1].Key) {
 			retPairs = append(retPairs, entry)
 		}
 	}
@@ -418,10 +436,13 @@ func (db *Database) RangeScan(start string, end string, pageSize uint64, page ui
 		return retPairs[p].Key < retPairs[q].Key
 	})
 
-	retValues := make([][]byte, pageSize)
+	retValues := make([][]byte, 0)
 
-	for i := 0; i < int(pageSize); i++ {
-		retValues[i] = retPairs[i].Value.Value
+	for i, pair := range retPairs {
+		if i == int(pageSize) {
+			break
+		}
+		retValues = append(retValues, pair.Value.Value)
 	}
 
 	return retValues
@@ -439,4 +460,4 @@ func checkReserved(key string) bool {
 	return false
 }
 
-// dodati list i range scan ovde
+// merkle serijalizacija
