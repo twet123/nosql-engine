@@ -151,7 +151,7 @@ func TestDatabase(t *testing.T) {
 	// testing db range scan
 	rangeRes := db.RangeScan(randomStr[0], randomStr[elementsCnt-1], 100, 0)
 
-	fmt.Println("Ragne for", randomStr[0], "-", randomStr[elementsCnt-1])
+	fmt.Println("Range for", randomStr[0], "-", randomStr[elementsCnt-1])
 	for _, res := range rangeRes {
 		fmt.Println(string(res))
 		if !(string(res) >= randomStr[0] && string(res) <= randomStr[elementsCnt-1]) {

@@ -22,6 +22,7 @@ func openFile(filepath string) *os.File {
 	}
 	return file
 }
+
 func levelFilter(tables []fs.FileInfo, level string) []string {
 	var retList []string
 	for _, table := range tables {
@@ -228,3 +229,132 @@ func deleteOldFiles(prefix, table string, level int) {
 		log.Fatal(err)
 	}
 }
+
+// func NeedsCompaction(level uint64, prefix string, maxTables uint64, maxLevels uint64) (bool, []string) {
+// 	if level >= maxLevels {
+// 		return false, nil
+// 	}
+
+// 	dirs, err := os.ReadDir(prefix)
+
+// 	if os.IsNotExist(err) {
+// 		return false, nil
+// 	} else {
+// 		panic(err)
+// 	}
+
+// 	resultingFiles := make([]string, 0)
+// 	for _, dir := range dirs {
+// 		tokens := strings.Split(dir.Name(), "-")
+
+// 		if tokens[1] == "L"+strconv.Itoa(int(level)) && tokens[3] == "TOC.txt" {
+// 			resultingFiles = append(resultingFiles, dir.Name())
+// 		}
+// 	}
+
+// 	return len(resultingFiles) == int(maxTables), resultingFiles
+// }
+
+// func DoCompaction(level uint64, prefix string, maxTables uint64, maxLevels uint64) {
+// 	res, files := NeedsCompaction(level, prefix, maxTables, maxLevels)
+// 	if !res {
+// 		return
+// 	}
+
+// 	dataFiles := make([]string, len(files))
+// 	for i, tocFile := range files {
+// 		file, err := os.Open(tocFile)
+
+// 		if err != nil {
+// 			panic(err)
+// 		}
+
+// 		dataFile := getDataFile(file)
+
+// 		if dataFile != "" {
+// 			dataFiles[i] = dataFile
+// 		}
+
+// 		file.Close()
+// 	}
+
+// 	newTableNum := getNextTableNum(level+1, prefix)
+// 	resFile, err := os.OpenFile(prefix+"usertable-L"+strconv.Itoa(int(level+1))+"-"+strconv.Itoa(int(newTableNum))+"-Data.db", os.O_WRONLY|os.O_CREATE, os.ModePerm)
+
+// 	if err != nil {
+// 		panic(err)
+// 	}
+
+// 	filePointers := make([]*os.File, len(dataFiles))
+
+// 	for i := range filePointers {
+// 		fp, err := os.OpenFile(prefix + dataFiles[i], os.O_RDONLY, os.ModePerm)
+
+// 		if err != nil {
+// 			panic(err)
+// 		}
+
+// 		filePointers[i] = fp
+// 	}
+
+// 	minRecords := make([]generic_types.KeyVal[string, databaseelem.DatabaseElem], len(filePointers))
+
+// 	for _, filePointer := range filePointers {
+// 		filePointer.Close()
+// 	}
+// 	resFile.Close()
+// }
+
+// func getMin(records []generic_types.KeyVal[string, databaseelem.DatabaseElem]) []int {
+// 	min := 0
+
+// }
+
+// func checkRecords(records []generic_types.KeyVal[string, databaseelem.DatabaseElem]) bool {
+// 	for _, rec := range records {
+// 		if rec.Key == "" {
+// 			return false
+// 		}
+// 	}
+
+// 	return true
+// }
+
+// func getDataFile(file *os.File) string {
+// 	scanner := bufio.NewScanner(file)
+// 	scanner.Split(bufio.ScanLines)
+
+// 	for scanner.Scan() {
+// 		line := scanner.Text()
+// 		if strings.Split(line, "-")[3] == "Data.db" {
+// 			return line
+// 		}
+// 	}
+
+// 	return ""
+// }
+
+// func getNextTableNum(level uint64, prefix string) uint64 {
+// 	dirs, err := os.ReadDir(prefix)
+
+// 	if os.IsNotExist(err) {
+// 		return 0
+// 	} else {
+// 		panic(err)
+// 	}
+
+// 	max := 0
+// 	for _, dir := range dirs {
+// 		tokens := strings.Split(dir.Name(), "-")
+
+// 		if tokens[1] == "L"+strconv.Itoa(int(level)) {
+// 			tableNum, err := strconv.Atoi(tokens[2])
+
+// 			if err == nil && tableNum > max {
+// 				max = tableNum
+// 			}
+// 		}
+// 	}
+
+// 	return uint64(max + 1)
+// }
