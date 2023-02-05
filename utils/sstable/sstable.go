@@ -13,6 +13,7 @@ import (
 	GTypes "nosql-engine/packages/utils/generic-types"
 	merkletree "nosql-engine/packages/utils/merkle-tree"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -299,6 +300,7 @@ func defineOrder(prefix string, level int) {
 	} else if err != nil {
 		panic(err)
 	}
+	order = 0
 
 	for _, file := range files {
 		var s string = file.Name()
@@ -364,17 +366,12 @@ func findAllTOCPerLevel(level int, files []fs.DirEntry) []string {
 }
 
 func sortTOCPerLevel(s []string) []string {
-	tmp := make([]string, 0)
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		if i > 0 {
-			if s[i][13] == s[i-1][13] {
-				tmp = append(tmp, s[i])
-				continue
-			}
-		}
-		s[i], s[j] = s[j], s[i]
-	}
-	s = append(s, tmp...)
+	sort.Slice(s, func(i, j int) bool {
+		s1, s2 := s[i], s[j]
+		n1, _ := strconv.Atoi(strings.Split(s1[13:], "-")[0])
+		n2, _ := strconv.Atoi(strings.Split(s2[13:], "-")[0])
+		return n1 > n2
+	})
 	return s
 }
 
