@@ -8,3 +8,5 @@ require (
 	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+require github.com/go-delve/delve v1.20.1 // indirect

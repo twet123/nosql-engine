@@ -646,10 +646,10 @@ func checkPrefixSummary(key string, filename string, fileOffset uint64) (bool, u
 			prevoffset = offset
 		}
 
-		if !strings.HasPrefix(filekey, key) && key < filekey {
+		if !strings.HasPrefix(filekey, key) && key > filekey {
 			prevoffset = offset
 		}
-		if key > filekey || stop == filekey {
+		if key < filekey || stop == filekey {
 			return true, prevoffset, offset
 		}
 	}
