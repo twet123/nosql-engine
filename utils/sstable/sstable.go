@@ -835,3 +835,39 @@ func isSpecialKey(key string) bool {
 	}
 	return false
 }
+
+// filename: filename of the "Data file"
+func getKeyRangeOne(filename string) (string, string) {
+	_, summaryOffset, _ := readFileOffsets(filename)
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+	file.Seek(int64(summaryOffset), io.SeekStart)
+	start := readKey(*file)
+	stop := readKey(*file)
+
+	return start, stop
+}
+
+// filename is the filename of the "Summary file"
+func getKeyRangeMany(filename string) (string, string) {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	start := readKey(*file)
+	stop := readKey(*file)
+
+	return start, stop
+}
+
+// if mode is "one" -> filename is the name of "Data file";
+// if mode is "many" -> filename is the name of "Summary file"
+func GetKeyRange(filename, mode string) (string, string) {
+	if mode == "one" {
+		return getKeyRangeOne(filename)
+	}
+	return getKeyRangeMany(filename)
+}
