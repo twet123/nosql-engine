@@ -203,30 +203,30 @@ func TestDatabase(t *testing.T) {
 	os.RemoveAll("./data")
 }
 
-// func TestCompactions(t *testing.T) {
-// 	rand.Seed(time.Now().UnixNano())
-// 	elementsCnt := 1000
+func TestCompactions(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+	elementsCnt := 1000
 
-// 	db := New()
-// 	randomStr := make([]string, elementsCnt)
+	db := New()
+	randomStr := make([]string, elementsCnt)
 
-// 	for i := 0; i < elementsCnt; i++ {
-// 		randomStr[i] = randSeq(10)
-// 		if !db.put(randomStr[i], []byte(randomStr[i])) {
-// 			t.Fatalf("Database PUT failed for key " + randomStr[i])
-// 		}
-// 	}
+	for i := 0; i < elementsCnt; i++ {
+		randomStr[i] = randSeq(10)
+		if !db.put(randomStr[i], []byte(randomStr[i])) {
+			t.Fatalf("Database PUT failed for key " + randomStr[i])
+		}
+	}
 
-// 	for i := 0; i < elementsCnt; i++ {
-// 		if !reflect.DeepEqual([]byte(randomStr[i]), db.get(randomStr[i])) {
-// 			// fmt.Println("Nije nasao", i, randomStr[i], res)
-// 			t.Fatalf("Database GET failed for key " + randomStr[i])
-// 		}
-// 	}
-// }
+	for i := 0; i < elementsCnt; i++ {
+		if !reflect.DeepEqual([]byte(randomStr[i]), db.get(randomStr[i])) {
+			// fmt.Println("Nije nasao", i, randomStr[i], res)
+			t.Fatalf("Database GET failed for key " + randomStr[i])
+		}
+	}
+}
 
-// func TestTestCompactions(t *testing.T) {
-// 	for i := 0; i < 4; i++ {
-// 		TestCompactions(t)
-// 	}
-// }
+func TestTestCompactions(t *testing.T) {
+	for i := 0; i < 4; i++ {
+		TestCompactions(t)
+	}
+}

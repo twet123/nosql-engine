@@ -1,7 +1,7 @@
 package memtable
 
 import (
-	btree "nosql-engine/packages/utils/b-tree"
+	btree "nosql-engine/packages/utils/btree"
 	database_elem "nosql-engine/packages/utils/database-elem"
 
 	generic_types "nosql-engine/packages/utils/generic-types"
@@ -14,7 +14,7 @@ type MemTable struct {
 	structType   string
 	maxCapacity  int
 	capacity     int
-	tree         *btree.BTree[string, database_elem.DatabaseElem]
+	tree         *btree.BTree
 	list         *skiplist.SkipList
 	summaryCount int
 	sstableMode  string
@@ -33,7 +33,7 @@ func New(capacity int, structType string, max uint64, min uint64, summaryCount i
 			structType:   structType,
 			maxCapacity:  capacity,
 			capacity:     0,
-			tree:         btree.Init[string, database_elem.DatabaseElem](int(min), int(max)),
+			tree:         btree.Init(int(min), int(max)),
 			list:         nil,
 			summaryCount: summaryCount,
 			sstableMode:  sstableMode,
@@ -155,10 +155,10 @@ func (mt *MemTable) Find(key string) (bool, generic_types.KeyVal[string, databas
 
 func (mt *MemTable) Flush() {
 	if mt.structType == "btree" {
-		prevMin := mt.tree.MinElementsCnt
-		prevMax := mt.tree.MaxElementsCnt
+		prevMin := mt.tree.MinChildren
+		prevMax := mt.tree.MaxChildren
 		sstable.CreateSStable(mt.tree.SortedSlice(), mt.summaryCount, "data/usertables", 0, mt.sstableMode)
-		mt.tree = btree.Init[string, database_elem.DatabaseElem](prevMin, prevMax)
+		mt.tree = btree.Init(prevMin, prevMax)
 	}
 	if mt.structType == "skiplist" {
 		prevMax := mt.list.MaxHeight
