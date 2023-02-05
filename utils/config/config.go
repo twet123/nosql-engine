@@ -22,6 +22,7 @@ type Config struct {
 	TimeUnit          string   `yaml:"time_unit"` // possible values "second", "minute", "day"
 	LsmLeveledComp    []uint64 `yaml:"lsm_leveled_compaction_cfg"`
 	SSTableSize       uint64   `yaml:"sstable_size"`
+	LSMType           string   `yaml:"lsm_type"` // possible values "size-tired", "leveled"
 }
 
 func GetConfig() *Config {
@@ -46,6 +47,7 @@ func GetConfig() *Config {
 		config.LsmLevels = 4
 		config.SSTableSize = 10
 		config.LsmLeveledComp = []uint64{4, 10, 100}
+		config.LSMType = "size-tired"
 	} else {
 		err := yaml.Unmarshal(configData, &config)
 		if err != nil {

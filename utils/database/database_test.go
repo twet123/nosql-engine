@@ -215,6 +215,9 @@ func TestCompactions(t *testing.T) {
 		if !db.put(randomStr[i], []byte(randomStr[i])) {
 			t.Fatalf("Database PUT failed for key " + randomStr[i])
 		}
+		if i%100 == 0 {
+			fmt.Println("  - Element: ", i+1, " put")
+		}
 	}
 
 	for i := 0; i < elementsCnt; i++ {
@@ -222,11 +225,15 @@ func TestCompactions(t *testing.T) {
 			// fmt.Println("Nije nasao", i, randomStr[i], res)
 			t.Fatalf("Database GET failed for key " + randomStr[i])
 		}
+		if i%100 == 0 {
+			fmt.Println("  - Element: ", i+1, " get")
+		}
 	}
 }
 
 func TestTestCompactions(t *testing.T) {
 	for i := 0; i < 4; i++ {
+		fmt.Println("Epoch: ", i+1)
 		TestCompactions(t)
 	}
 }
