@@ -4,14 +4,18 @@ import (
 	bloomfilter "nosql-engine/packages/utils/bloom-filter"
 	"nosql-engine/packages/utils/cache"
 	"nosql-engine/packages/utils/cms"
+	"nosql-engine/packages/utils/compaction"
 	"nosql-engine/packages/utils/config"
 	database_elem "nosql-engine/packages/utils/database-elem"
+	generic_types "nosql-engine/packages/utils/generic-types"
 	"nosql-engine/packages/utils/hll"
 	"nosql-engine/packages/utils/memtable"
 	simhash "nosql-engine/packages/utils/sim-hash"
 	"nosql-engine/packages/utils/sstable"
 	tokenbucket "nosql-engine/packages/utils/token-bucket"
 	"nosql-engine/packages/utils/wal"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -56,7 +60,7 @@ func New() *Database {
 }
 
 func (db *Database) Put(key string, value []byte) bool {
-	if !db.CheckTokens() {
+	if !db.CheckTokens() || checkReserved(key) {
 		return false
 	}
 
@@ -75,6 +79,9 @@ func (db *Database) put(key string, value []byte) bool {
 
 		if db.memtable.CheckFlushed() {
 			db.wal.EmptyWAL()
+			for i := 0; i < int(db.config.LsmLevels); i++ {
+				compaction.MergeCompaction(i, "data/usertables")
+			}
 		}
 
 		return true
@@ -84,7 +91,7 @@ func (db *Database) put(key string, value []byte) bool {
 }
 
 func (db *Database) Delete(key string) bool {
-	if !db.CheckTokens() {
+	if !db.CheckTokens() || checkReserved(key) {
 		return false
 	}
 
@@ -98,6 +105,9 @@ func (db *Database) delete(key string) bool {
 
 		if db.memtable.CheckFlushed() {
 			db.wal.EmptyWAL()
+			for i := 0; i < int(db.config.LsmLevels); i++ {
+				compaction.MergeCompaction(i, "data/usertables")
+			}
 		}
 
 		return true
@@ -106,9 +116,9 @@ func (db *Database) delete(key string) bool {
 	return false
 }
 
-// first parameter will return false if the request limit was exceeded
+// first parameter will return false if the request limit was exceeded or you tried to access system values
 func (db *Database) Get(key string) (bool, []byte) {
-	if !db.CheckTokens() {
+	if !db.CheckTokens() || checkReserved(key) {
 		return false, nil
 	}
 
@@ -346,4 +356,108 @@ func (db *Database) SHCompare(key string, string1 string, string2 string) (bool,
 	return true, shObj.Compare(string1, string2)
 }
 
-// dodati list i range scan ovde
+func (db *Database) List(prefix string, pageSize uint64, page uint64) [][]byte {
+	if !db.CheckTokens() {
+		return nil
+	}
+
+	retMap := sstable.PrefixScan(prefix, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles, pageSize, page)
+	memtableEntries := db.memtable.AllElements()
+	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
+
+	for key, elem := range retMap {
+		if key == "" {
+			continue
+		}
+		retPairs = append(retPairs, generic_types.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: elem})
+	}
+
+	sort.Slice(retPairs, func(p, q int) bool {
+		return retPairs[p].Key < retPairs[q].Key
+	})
+
+	for _, entry := range memtableEntries {
+		if checkReserved(entry.Key) || !strings.HasPrefix(entry.Key, prefix) {
+			continue
+		}
+
+		if len(retPairs) < int(pageSize) || (entry.Key > retPairs[0].Key && entry.Key < retPairs[len(retPairs)-1].Key) {
+			retPairs = append(retPairs, entry)
+		}
+	}
+
+	sort.Slice(retPairs, func(p, q int) bool {
+		return retPairs[p].Key < retPairs[q].Key
+	})
+
+	retValues := make([][]byte, 0)
+
+	for i, pair := range retPairs {
+		if i == int(pageSize) {
+			break
+		}
+		retValues = append(retValues, pair.Value.Value)
+	}
+
+	return retValues
+}
+
+func (db *Database) RangeScan(start string, end string, pageSize uint64, page uint64) [][]byte {
+	if !db.CheckTokens() {
+		return nil
+	}
+
+	retMap := sstable.RangeScan(start, end, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles, pageSize, page)
+	memtableEntries := db.memtable.AllElements()
+	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
+
+	for key, elem := range retMap {
+		if key == "" {
+			continue
+		}
+		retPairs = append(retPairs, generic_types.KeyVal[string, database_elem.DatabaseElem]{Key: key, Value: elem})
+	}
+
+	sort.Slice(retPairs, func(p, q int) bool {
+		return retPairs[p].Key < retPairs[q].Key
+	})
+
+	for _, entry := range memtableEntries {
+		if checkReserved(entry.Key) || entry.Key < start || entry.Key > end {
+			continue
+		}
+
+		if len(retPairs) < int(pageSize) || (entry.Key > retPairs[0].Key && entry.Key < retPairs[len(retPairs)-1].Key) {
+			retPairs = append(retPairs, entry)
+		}
+	}
+
+	sort.Slice(retPairs, func(p, q int) bool {
+		return retPairs[p].Key < retPairs[q].Key
+	})
+
+	retValues := make([][]byte, 0)
+
+	for i, pair := range retPairs {
+		if i == int(pageSize) {
+			break
+		}
+		retValues = append(retValues, pair.Value.Value)
+	}
+
+	return retValues
+}
+
+func checkReserved(key string) bool {
+	reservedPrefixes := [...]string{"tb_", "hll_", "cms_", "bf_", "sh_"}
+
+	for _, pref := range reservedPrefixes {
+		if strings.HasPrefix(key, pref) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// merkle serijalizacija
