@@ -114,7 +114,8 @@ func TestDatabase(t *testing.T) {
 	}
 
 	for i := 0; i < elementsCnt; i++ {
-		if !db.BFFind("myBF", randomStr[i]) {
+		succ, res := db.BFFind("myBF", randomStr[i])
+		if !succ || !res {
 			t.Fatalf("Database BloomFilter find failed")
 		}
 	}

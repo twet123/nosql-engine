@@ -314,20 +314,21 @@ func (db *Database) BFAdd(key string, keyToAdd string) bool {
 	return db.put("bf_"+key, bfObj.Serialize())
 }
 
-func (db *Database) BFFind(key string, keyToFind string) bool {
+// the first return value tells if the operation was successful
+func (db *Database) BFFind(key string, keyToFind string) (bool, bool) {
 	if !db.CheckTokens() {
-		return false
+		return false, false
 	}
 
 	bfSerialization := db.get("bf_" + key)
 
 	if bfSerialization == nil {
-		return false
+		return false, false
 	}
 
 	bfObj := bloomfilter.Deserialize(bfSerialization)
 
-	return bfObj.Find(keyToFind)
+	return true, bfObj.Find(keyToFind)
 }
 
 func (db *Database) NewSH(key string, bits uint) bool {
