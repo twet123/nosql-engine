@@ -14,6 +14,7 @@ import (
 	"nosql-engine/packages/utils/sstable"
 	tokenbucket "nosql-engine/packages/utils/token-bucket"
 	"nosql-engine/packages/utils/wal"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -148,6 +149,12 @@ func (db *Database) get(key string) []byte {
 		} else {
 			return elem.Value
 		}
+	}
+
+	files, err := os.ReadDir("data/usertables")
+
+	if len(files) == 0 || os.IsNotExist(err) {
+		return nil
 	}
 
 	found, elem := sstable.Find(key, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles)
