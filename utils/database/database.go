@@ -364,6 +364,17 @@ func (db *Database) List(prefix string, pageSize uint64, page uint64) [][]byte {
 	retMap := sstable.PrefixScan(prefix, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles, pageSize, page)
 	memtableEntries := db.memtable.AllElements()
 	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
+	newMemtableEntries := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
+
+	for _, entry := range memtableEntries {
+		_, found := retMap[entry.Key]
+
+		if found {
+			retMap[entry.Key] = entry.Value
+		} else {
+			newMemtableEntries = append(newMemtableEntries, entry)
+		}
+	}
 
 	for key, elem := range retMap {
 		if key == "" {
@@ -376,7 +387,7 @@ func (db *Database) List(prefix string, pageSize uint64, page uint64) [][]byte {
 		return retPairs[p].Key < retPairs[q].Key
 	})
 
-	for _, entry := range memtableEntries {
+	for _, entry := range newMemtableEntries {
 		if checkReserved(entry.Key) || !strings.HasPrefix(entry.Key, prefix) {
 			continue
 		}
@@ -407,9 +418,24 @@ func (db *Database) RangeScan(start string, end string, pageSize uint64, page ui
 		return nil
 	}
 
+	if end < start {
+		return nil
+	}
+
 	retMap := sstable.RangeScan(start, end, "data/usertables", db.config.LsmLevels, db.config.SSTableFiles, pageSize, page)
 	memtableEntries := db.memtable.AllElements()
 	retPairs := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
+	newMemtableEntries := make([]generic_types.KeyVal[string, database_elem.DatabaseElem], 0)
+
+	for _, entry := range memtableEntries {
+		_, found := retMap[entry.Key]
+
+		if found {
+			retMap[entry.Key] = entry.Value
+		} else {
+			newMemtableEntries = append(newMemtableEntries, entry)
+		}
+	}
 
 	for key, elem := range retMap {
 		if key == "" {
@@ -422,7 +448,7 @@ func (db *Database) RangeScan(start string, end string, pageSize uint64, page ui
 		return retPairs[p].Key < retPairs[q].Key
 	})
 
-	for _, entry := range memtableEntries {
+	for _, entry := range newMemtableEntries {
 		if checkReserved(entry.Key) || entry.Key < start || entry.Key > end {
 			continue
 		}
