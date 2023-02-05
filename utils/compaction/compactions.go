@@ -36,6 +36,27 @@ func levelFilter(tables []fs.FileInfo, level string) []string {
 	}
 	return retList
 }
+
+func levelRangeFilter(tables []fs.FileInfo, level string, min, max string, mode string) []string {
+	var retList []string
+	for _, table := range tables {
+		var s string = table.Name()
+		tableLvl := strings.Split(s, "-")[1]
+		if tableLvl != ("L"+level) || !strings.Contains(s, "Data.db") {
+			continue
+		}
+		min1, max1 := sstable.GetKeyRange(s, mode)
+		if min1 > max {
+			continue
+		}
+		if max1 < min {
+			continue
+		}
+		retList = append(retList, table.Name())
+	}
+	return retList
+}
+
 func getDataFileOrderNum(filename string) int {
 	orderNum, err := strconv.Atoi(strings.Split(filename, "-")[2])
 	if err != nil {
@@ -49,6 +70,13 @@ func getDataFileOrderNum(filename string) int {
 func NeedsCompaction(level int, files []fs.FileInfo, maxPerLevel uint64) bool {
 	tables := levelFilter(files, strconv.Itoa(level))
 
+	return len(tables) > int(maxPerLevel)
+}
+
+func NeedsCompactionLeveled(level int, files []fs.FileInfo) bool {
+	config := config2.GetConfig()
+	maxPerLevel := config.LsmLeveledComp[level]
+	tables := levelFilter(files, strconv.Itoa(level))
 	return len(tables) > int(maxPerLevel)
 }
 
@@ -98,7 +126,122 @@ func MergeCompaction(level int, dirPath string) {
 		//nema kompakcije na poslednjem nivou
 		MergeCompaction(level+1, dirPath)
 	}
+}
 
+func LeveledCompaction(level int, dirPath string) {
+	config := config2.GetConfig()
+	files, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		panic(err)
+	}
+
+	if !NeedsCompactionLeveled(level, files) {
+		return
+	}
+	tables := levelFilter(files, strconv.Itoa(level))
+	nextTables := levelFilter(files, strconv.Itoa(level+1))
+
+	if level == 0 {
+		merged := make([]GTypes.KeyVal[string, database_elem.DatabaseElem], 0)
+		for i := 0; i < len(tables); i++ {
+			merged = mergeTwoTablesInMemory(merged, readWholeTable(tables[i], config.SSTableFiles))
+			deleteOldFiles(dirPath, tables[i], level)
+		}
+		for i := 0; i < len(nextTables); i++ {
+			merged = mergeTwoTablesInMemory(merged, readWholeTable(nextTables[i], config.SSTableFiles))
+			deleteOldFiles(dirPath, nextTables[i], level+1)
+		}
+		step := uint64(len(merged)) / config.SSTableSize
+		if uint64(len(merged))%config.SSTableSize > 0 {
+			step += 1
+		}
+		for i := uint64(0); i < uint64(len(merged)); i += step {
+			to := i + step
+			if to > uint64(len(merged)) {
+				to = uint64(len(merged))
+			}
+			sstable.CreateSStable(merged[i:to], int(config.SummaryCount), dirPath, level+1, config.SSTableFiles)
+		}
+	} else {
+		for i := 0; i < len(tables); i++ {
+			merged := readWholeTable(tables[i], config.SSTableFiles)
+			deleteOldFiles(dirPath, tables[i], level)
+			nextTables = levelRangeFilter(files, strconv.Itoa(level+1),
+				merged[0].Key, merged[len(merged)-1].Key, config.SSTableFiles)
+
+			for j := 0; j < len(nextTables); j++ {
+				merged = mergeTwoTablesInMemory(merged, readWholeTable(nextTables[j], config.SSTableFiles))
+				deleteOldFiles(dirPath, nextTables[j], level+1)
+			}
+			step := uint64(len(merged)) / config.SSTableSize
+			if uint64(len(merged))%config.SSTableSize > 0 {
+				step += 1
+			}
+			for j := uint64(0); j < uint64(len(merged)); j += step {
+				to := j + step
+				if to > uint64(len(merged)) {
+					to = uint64(len(merged))
+				}
+				sstable.CreateSStable(merged[j:to], int(config.SummaryCount), dirPath, level+1, config.SSTableFiles)
+			}
+		}
+	}
+
+	if level+1 < len(config.LsmLeveledComp)-1 {
+		LeveledCompaction(level+1, dirPath)
+	}
+}
+
+func readWholeTable(path1 string, mode string) (logs []GTypes.KeyVal[string, database_elem.DatabaseElem]) {
+	var offset1 int64
+
+	table1 := openFile(path1)
+	defer table1.Close()
+
+	if mode == "many" {
+		offset1, _ = table1.Seek(0, io.SeekEnd)
+		table1.Seek(0, io.SeekStart)
+	} else {
+		offset1 = int64(sstable.ReadFileOffset(path1))
+	}
+
+	for {
+		key1, val1 := sstable.ReadRecord(table1, uint64(offset1))
+		logs = append(logs, GTypes.KeyVal[string, database_elem.DatabaseElem]{Key: key1, Value: *val1})
+
+		if val1 == nil {
+			break
+		}
+	}
+
+	return
+}
+
+func mergeTwoTablesInMemory(t1, t2 []GTypes.KeyVal[string, database_elem.DatabaseElem]) (logs []GTypes.KeyVal[string, database_elem.DatabaseElem]) {
+	i1 := 0
+	i2 := 0
+	k := 0
+
+	for i1 < len(t1) && i2 < len(t2) {
+		k, logs = compareLogs(t1[i1].Key, t2[i2].Key, &t1[i1].Value, &t2[i2].Value, logs)
+
+		//citamo naredne logove
+		if k == 1 {
+			i1++
+		} else if k == 2 {
+			i2++
+		} else if k == 0 {
+			i1++
+			i2++
+		}
+	}
+	for ; i1 < len(t1); i1++ {
+		logs = append(logs, t1[i1])
+	}
+	for ; i2 < len(t2); i2++ {
+		logs = append(logs, t2[i2])
+	}
+	return
 }
 
 func mergeTwoTables(path1, path2 string, logs []GTypes.KeyVal[string, database_elem.DatabaseElem], mode string) []GTypes.KeyVal[string, database_elem.DatabaseElem] {

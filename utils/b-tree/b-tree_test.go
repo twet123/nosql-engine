@@ -10,9 +10,9 @@ import (
 func TestBTreeOnRandomSample(t *testing.T) {
 	rand.Seed(42)
 	a := map[int32]int32{}
-	tree := Init[int32, int32](3, 5)
+	tree := Init[int32, int32](2, 4)
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 		operation := rand.Intn(3)
 		key := int32(rand.Intn(100) + 1)
 		value := int32(rand.Intn(100) + 1)
@@ -24,24 +24,27 @@ func TestBTreeOnRandomSample(t *testing.T) {
 			}
 			tree.Set(key, value)
 			a[key] = value
-			fmt.Println(tree)
+			//fmt.Println(tree)
 		case 1:
-			fmt.Println("Gde", key)
-			v := a[key]
-			found, kv := tree.Get(key)
-			if v == 0 && found {
-				fmt.Println("Odd kv", kv)
-				t.Fatalf("Found non existing key")
-			}
-			if v != 0 && kv.Value != v {
-				fmt.Println("Expected:", a[key], "Got:", kv)
-				t.Fatalf("Found wrong key")
+			for i := 0; i < 10; i++ {
+				key := int32(rand.Intn(100) + 1)
+				fmt.Println("Gde", key)
+				v := a[key]
+				found, kv := tree.Get(key)
+				if v == 0 && found {
+					fmt.Println("Odd kv", kv)
+					t.Fatalf("Found non existing key")
+				}
+				if v != 0 && kv.Value != v {
+					fmt.Println("Expected:", a[key], "Got:", kv)
+					t.Fatalf("Found wrong key")
+				}
 			}
 		case 2:
 			fmt.Println("Del", key)
 			delete(a, key)
 			tree.Remove(key)
-			fmt.Println(tree)
+			//fmt.Println(tree)
 		}
 	}
 
