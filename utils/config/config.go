@@ -30,8 +30,8 @@ func GetConfig() *Config {
 		config.WalSegmentSize = 20
 		config.MemtableSize = 20
 		config.MemtableStructure = "skiplist"
-		config.BTreeMin = 2
-		config.BTreeMax = 4
+		config.BTreeMin = 3
+		config.BTreeMax = 5
 		config.SkipListLevels = 32
 		config.SummaryCount = 3
 		config.CacheSize = 10

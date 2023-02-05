@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"golang.org/x/exp/rand"
+	"math/rand"
 )
 
 func TestBTreeOnRandomSample(t *testing.T) {
@@ -106,3 +106,34 @@ func TestBTreeOperationByOperation(t *testing.T) {
 	tree.Remove(10)
 	fmt.Println(tree)
 }
+
+// var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+// func randSeq(n int) string {
+// 	b := make([]rune, n)
+// 	for i := range b {
+// 		b[i] = letters[rand.Intn(len(letters))]
+// 	}
+// 	return string(b)
+// }
+
+// func TestBTree(t *testing.T) {
+// 	rand.Seed(time.Now().UnixNano())
+// 	elementsCnt := 100
+
+// 	btree := Init[string, databaseelem.DatabaseElem](3, 5)
+// 	// randomStr := make([]string, elementsCnt)
+
+// 	for i := 0; i < elementsCnt; i++ {
+// 		// randomStr[i] = randSeq(10)
+// 		newElem := &databaseelem.DatabaseElem{Value: []byte("key" + strconv.Itoa(i)), Tombstone: 0, Timestamp: uint64(time.Now().Unix())}
+// 		btree.Set("key"+strconv.Itoa(i), *newElem)
+// 	}
+
+// 	for i := 0; i < elementsCnt; i++ {
+// 		found, _ := btree.Get("key" + strconv.Itoa(i))
+// 		if !found {
+// 			t.Fatalf("BTree failed for key " + "key" + strconv.Itoa(i))
+// 		}
+// 	}
+// }
